@@ -131,6 +131,55 @@
         </div>
     </div>
 
+    <!-- Edit Player Modal -->
+    <div class="modal fade" id="editPlayerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Player</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="editPlayerForm">
+                    <div class="modal-body">
+                        <input type="hidden" id="editOriginalName" name="original_name">
+                        
+                        <div class="mb-3">
+                            <label for="editPlayerName" class="form-label">Player Name *</label>
+                            <input type="text" class="form-control" id="editPlayerName" name="name" required>
+                            <div class="form-text">Choose a unique name for this player (e.g., "Living Room", "Kitchen")</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editAudioDevice" class="form-label">Audio Device *</label>
+                            <select class="form-select" id="editAudioDevice" name="device" required>
+                                <option value="">Select an audio device...</option>
+                                {% for device in devices %}
+                                <option value="{{ device.id }}">{{ device.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editServerIP" class="form-label">Music Assistant Server IP (optional)</label>
+                            <input type="text" class="form-control" id="editServerIP" name="server_ip" placeholder="192.168.1.100">
+                            <div class="form-text">Leave empty for auto-discovery</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editMacAddress" class="form-label">MAC Address</label>
+                            <input type="text" class="form-control" id="editMacAddress" name="mac_address" placeholder="aa:bb:cc:dd:ee:ff" readonly>
+                            <div class="form-text">MAC address is automatically generated and cannot be changed</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Update Player</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Player Modal -->
     <div class="modal fade" id="addPlayerModal" tabindex="-1">
         <div class="modal-dialog">
@@ -324,13 +373,95 @@
         }
         
         function editPlayer(playerName) {
-            // TODO: Implement edit functionality
-            showAlert('Edit functionality coming soon!', 'info');
+            // Get current player data
+            fetch(`/api/players`)
+                .then(response => response.json())
+                .then(data => {
+                    const player = data.players[playerName];
+                    if (!player) {
+                        showAlert('Player not found', 'danger');
+                        return;
+                    }
+                    
+                    // Populate the edit form
+                    document.getElementById('editOriginalName').value = playerName;
+                    document.getElementById('editPlayerName').value = player.name;
+                    document.getElementById('editServerIP').value = player.server_ip || '';
+                    document.getElementById('editMacAddress').value = player.mac_address;
+                    
+                    // Load devices and set current device
+                    return fetch('/api/devices');
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const deviceSelect = document.getElementById('editAudioDevice');
+                    deviceSelect.innerHTML = '<option value="">Select an audio device...</option>';
+                    
+                    data.devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = device.name;
+                        deviceSelect.appendChild(option);
+                    });
+                    
+                    // Set the current device
+                    fetch(`/api/players`)
+                        .then(response => response.json())
+                        .then(playerData => {
+                            const currentPlayer = playerData.players[playerName];
+                            if (currentPlayer) {
+                                deviceSelect.value = currentPlayer.device;
+                            }
+                        });
+                    
+                    // Show the modal
+                    new bootstrap.Modal(document.getElementById('editPlayerModal')).show();
+                })
+                .catch(error => {
+                    console.error('Error loading player data:', error);
+                    showAlert('Error loading player data: ' + error.message, 'danger');
+                });
         }
         
         function refreshStatus() {
             location.reload();
         }
+        
+        // Handle edit player form submission
+        document.getElementById('editPlayerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            const originalName = data.original_name;
+            
+            try {
+                const response = await fetch(`/api/players/${encodeURIComponent(originalName)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: data.name,
+                        device: data.device,
+                        server_ip: data.server_ip,
+                        mac_address: data.mac_address
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    document.getElementById('editPlayerModal').querySelector('.btn-close').click();
+                    e.target.reset();
+                    // Reload page to show updated player
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Error updating player: ' + error.message, 'danger');
+            }
+        });
         
         // Handle add player form submission
         document.getElementById('addPlayerForm').addEventListener('submit', async function(e) {
@@ -359,6 +490,32 @@
                 }
             } catch (error) {
                 showAlert('Error creating player: ' + error.message, 'danger');
+            }
+        });
+        
+        // Auto-refresh device list when edit modal opens
+        document.getElementById('editPlayerModal').addEventListener('show.bs.modal', async function() {
+            try {
+                const response = await fetch('/api/devices');
+                const result = await response.json();
+                
+                const deviceSelect = document.getElementById('editAudioDevice');
+                const currentValue = deviceSelect.value; // Preserve current selection
+                deviceSelect.innerHTML = '<option value="">Select an audio device...</option>';
+                
+                result.devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.textContent = device.name;
+                    deviceSelect.appendChild(option);
+                });
+                
+                // Restore the current selection
+                if (currentValue) {
+                    deviceSelect.value = currentValue;
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
             }
         });
         

@@ -196,6 +196,51 @@ class SqueezeliteManager:
         self.save_config()
         return True, "Player created successfully"
     
+    def update_player(self, old_name, new_name, device, server_ip='', mac_address=''):
+        """Update an existing squeezelite player"""
+        if old_name not in self.players:
+            return False, "Player not found"
+        
+        # If name is changing, check if new name already exists
+        if old_name != new_name and new_name in self.players:
+            return False, "Player with this name already exists"
+        
+        # Stop the player if it's running (we'll need to restart with new config)
+        was_running = self.get_player_status(old_name)
+        if was_running:
+            self.stop_player(old_name)
+        
+        # Get current player config
+        player_config = self.players[old_name].copy()
+        
+        # Update the configuration
+        player_config['name'] = new_name
+        player_config['device'] = device
+        player_config['server_ip'] = server_ip
+        if mac_address:
+            player_config['mac_address'] = mac_address
+        
+        # If name changed, remove old entry and add new one
+        if old_name != new_name:
+            del self.players[old_name]
+            # Also remove from processes if exists
+            if old_name in self.processes:
+                del self.processes[old_name]
+        
+        # Save updated config
+        self.players[new_name] = player_config
+        self.save_config()
+        
+        # Restart the player if it was running
+        if was_running:
+            success, message = self.start_player(new_name)
+            if success:
+                return True, f"Player updated and restarted successfully"
+            else:
+                return True, f"Player updated successfully, but failed to restart: {message}"
+        
+        return True, "Player updated successfully"
+    
     def delete_player(self, name):
         """Delete a player"""
         if name not in self.players:
@@ -414,6 +459,24 @@ def create_player():
     
     success, message = manager.create_player(name, device, server_ip, mac_address)
     return jsonify({'success': success, 'message': message})
+
+@app.route('/api/players/<name>', methods=['PUT'])
+def update_player(name):
+    """API endpoint to update a player"""
+    data = request.json
+    new_name = data.get('name', name)
+    device = data.get('device')
+    server_ip = data.get('server_ip', '')
+    mac_address = data.get('mac_address', '')
+    
+    if not device:
+        return jsonify({'success': False, 'message': 'Device is required'}), 400
+    
+    success, message = manager.update_player(name, new_name, device, server_ip, mac_address)
+    if success:
+        return jsonify({'success': success, 'message': message, 'new_name': new_name})
+    else:
+        return jsonify({'success': success, 'message': message}), 400
 
 @app.route('/api/players/<name>', methods=['DELETE'])
 def delete_player(name):
