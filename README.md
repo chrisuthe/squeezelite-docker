@@ -24,7 +24,7 @@ A Docker container that runs multiple [squeezelite](https://github.com/ralph-irv
 - **🖥️ Cross-Platform**: Works on Linux, Windows (Docker Desktop), and WSL2
 
 ## DockerHub
-![DockerHub Images](https://hub.docker.com/r/chrisuthe/squeezelitemultiroom)
+[DockerHub Images](https://hub.docker.com/r/chrisuthe/squeezelitemultiroom)
 
 ## 📋 Prerequisites
 
