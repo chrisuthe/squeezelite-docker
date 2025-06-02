@@ -105,11 +105,11 @@
                                         </small>
                                     </div>
                                     
-                                    <div class="btn-group w-100" role="group">
-                                        <button class="btn btn-success btn-action start-btn" data-player="{{ name }}" onclick="startPlayer('{{ name }}')">
+                                    <div class="d-grid">
+                                        <button class="btn btn-success btn-action start-btn {% if statuses.get(name) %}d-none{% endif %}" data-player="{{ name }}" onclick="startPlayer('{{ name }}')">
                                             <i class="fas fa-play me-1"></i>Start
                                         </button>
-                                        <button class="btn btn-danger btn-action stop-btn" data-player="{{ name }}" onclick="stopPlayer('{{ name }}')">
+                                        <button class="btn btn-danger btn-action stop-btn {% if not statuses.get(name) %}d-none{% endif %}" data-player="{{ name }}" onclick="stopPlayer('{{ name }}')">
                                             <i class="fas fa-stop me-1"></i>Stop
                                         </button>
                                     </div>
@@ -192,14 +192,22 @@
             for (const [playerName, isRunning] of Object.entries(statuses)) {
                 const statusIndicator = document.getElementById(`status-${playerName}`);
                 const statusText = document.getElementById(`status-text-${playerName}`);
+                const startBtn = document.querySelector(`[data-player="${playerName}"].start-btn`);
+                const stopBtn = document.querySelector(`[data-player="${playerName}"].stop-btn`);
                 
                 if (statusIndicator && statusText) {
                     if (isRunning) {
                         statusIndicator.className = 'status-indicator status-running';
                         statusText.textContent = 'Running';
+                        // Hide start button, show stop button
+                        if (startBtn) startBtn.classList.add('d-none');
+                        if (stopBtn) stopBtn.classList.remove('d-none');
                     } else {
                         statusIndicator.className = 'status-indicator status-stopped';
                         statusText.textContent = 'Stopped';
+                        // Show start button, hide stop button
+                        if (startBtn) startBtn.classList.remove('d-none');
+                        if (stopBtn) stopBtn.classList.add('d-none');
                     }
                 }
             }
@@ -228,13 +236,23 @@
         
         function setButtonLoading(playerName, action, loading) {
             const button = document.querySelector(`[data-player="${playerName}"].${action}-btn`);
-            if (button) {
+            if (button && !button.classList.contains('d-none')) {
                 if (loading) {
                     button.disabled = true;
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>' + button.textContent.trim();
+                    const icon = button.querySelector('i');
+                    if (icon) {
+                        icon.className = 'fas fa-spinner fa-spin me-1';
+                    }
                 } else {
                     button.disabled = false;
-                    button.innerHTML = button.innerHTML.replace(/<i class="fas fa-spinner fa-spin me-1"><\/i>/, '');
+                    const icon = button.querySelector('i');
+                    if (icon) {
+                        if (action === 'start') {
+                            icon.className = 'fas fa-play me-1';
+                        } else {
+                            icon.className = 'fas fa-stop me-1';
+                        }
+                    }
                 }
             }
         }

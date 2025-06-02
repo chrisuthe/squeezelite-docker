@@ -21,6 +21,18 @@
     animation: pulse 2s infinite;
 }
 
+/* Single button styling improvements */
+.btn-action {
+    min-height: 42px;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-action:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
 /* Dark mode support (optional) */
 @media (prefers-color-scheme: dark) {
     body {
