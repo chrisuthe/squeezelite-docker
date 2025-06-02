@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Squeezelite Multi-Room Controller</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-running {
+            background-color: #28a745;
+            box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
+        }
+        .status-stopped {
+            background-color: #dc3545;
+        }
+        .player-card {
+            transition: transform 0.2s;
+        }
+        .player-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .header-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .btn-action {
+            min-width: 80px;
+        }
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="header-gradient text-white py-4 mb-4">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h1 class="mb-0"><i class="fas fa-music me-2"></i>Squeezelite Multi-Room Controller</h1>
+                    <p class="mb-0 opacity-75">Manage your multi-room audio players</p>
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#addPlayerModal">
+                        <i class="fas fa-plus me-2"></i>Add Player
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="alert-container"></div>
+        
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2>Active Players</h2>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="refreshStatus()">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                    </button>
+                </div>
+                
+                <div id="players-container" class="row">
+                    {% if players %}
+                        {% for name, player in players.items() %}
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <div class="card player-card h-100" data-player="{{ name }}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h5 class="card-title mb-0">{{ player.name }}</h5>
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li><a class="dropdown-item" href="#" onclick="editPlayer('{{ name }}')"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                                                <li><a class="dropdown-item text-danger" href="#" onclick="deletePlayer('{{ name }}')"><i class="fas fa-trash me-2"></i>Delete</a></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="status-container mb-3">
+                                        <span class="status-indicator status-{% if statuses.get(name) %}running{% else %}stopped{% endif %}" id="status-{{ name }}"></span>
+                                        <span class="status-text" id="status-text-{{ name }}">
+                                            {% if statuses.get(name) %}Running{% else %}Stopped{% endif %}
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="player-details mb-3">
+                                        <small class="text-muted">
+                                            <div><strong>Device:</strong> {{ player.device }}</div>
+                                            <div><strong>MAC:</strong> {{ player.mac_address }}</div>
+                                            {% if player.server_ip %}
+                                            <div><strong>Server:</strong> {{ player.server_ip }}</div>
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                    
+                                    <div class="btn-group w-100" role="group">
+                                        <button class="btn btn-success btn-action start-btn" data-player="{{ name }}" onclick="startPlayer('{{ name }}')">
+                                            <i class="fas fa-play me-1"></i>Start
+                                        </button>
+                                        <button class="btn btn-danger btn-action stop-btn" data-player="{{ name }}" onclick="stopPlayer('{{ name }}')">
+                                            <i class="fas fa-stop me-1"></i>Stop
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="col-12">
+                            <div class="text-center py-5">
+                                <i class="fas fa-music fa-3x text-muted mb-3"></i>
+                                <h4 class="text-muted">No players configured</h4>
+                                <p class="text-muted">Click "Add Player" to create your first multi-room audio player</p>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Player Modal -->
+    <div class="modal fade" id="addPlayerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Player</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="addPlayerForm">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="playerName" class="form-label">Player Name *</label>
+                            <input type="text" class="form-control" id="playerName" name="name" required>
+                            <div class="form-text">Choose a unique name for this player (e.g., "Living Room", "Kitchen")</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="audioDevice" class="form-label">Audio Device *</label>
+                            <select class="form-select" id="audioDevice" name="device" required>
+                                <option value="">Select an audio device...</option>
+                                {% for device in devices %}
+                                <option value="{{ device.id }}">{{ device.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="serverIP" class="form-label">Music Assistant Server IP (optional)</label>
+                            <input type="text" class="form-control" id="serverIP" name="server_ip" placeholder="192.168.1.100">
+                            <div class="form-text">Leave empty for auto-discovery</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="macAddress" class="form-label">MAC Address (optional)</label>
+                            <input type="text" class="form-control" id="macAddress" name="mac_address" placeholder="aa:bb:cc:dd:ee:ff">
+                            <div class="form-text">Leave empty to auto-generate</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create Player</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        
+        // Handle real-time status updates
+        socket.on('status_update', function(statuses) {
+            updatePlayerStatuses(statuses);
+        });
+        
+        function updatePlayerStatuses(statuses) {
+            for (const [playerName, isRunning] of Object.entries(statuses)) {
+                const statusIndicator = document.getElementById(`status-${playerName}`);
+                const statusText = document.getElementById(`status-text-${playerName}`);
+                
+                if (statusIndicator && statusText) {
+                    if (isRunning) {
+                        statusIndicator.className = 'status-indicator status-running';
+                        statusText.textContent = 'Running';
+                    } else {
+                        statusIndicator.className = 'status-indicator status-stopped';
+                        statusText.textContent = 'Stopped';
+                    }
+                }
+            }
+        }
+        
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alert-container');
+            const alertId = 'alert-' + Date.now();
+            const alert = document.createElement('div');
+            alert.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert" id="${alertId}">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            alertContainer.appendChild(alert);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                const alertElement = document.getElementById(alertId);
+                if (alertElement) {
+                    alertElement.remove();
+                }
+            }, 5000);
+        }
+        
+        function setButtonLoading(playerName, action, loading) {
+            const button = document.querySelector(`[data-player="${playerName}"].${action}-btn`);
+            if (button) {
+                if (loading) {
+                    button.disabled = true;
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>' + button.textContent.trim();
+                } else {
+                    button.disabled = false;
+                    button.innerHTML = button.innerHTML.replace(/<i class="fas fa-spinner fa-spin me-1"><\/i>/, '');
+                }
+            }
+        }
+        
+        async function startPlayer(playerName) {
+            setButtonLoading(playerName, 'start', true);
+            try {
+                const response = await fetch(`/api/players/${encodeURIComponent(playerName)}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Error starting player: ' + error.message, 'danger');
+            } finally {
+                setButtonLoading(playerName, 'start', false);
+            }
+        }
+        
+        async function stopPlayer(playerName) {
+            setButtonLoading(playerName, 'stop', true);
+            try {
+                const response = await fetch(`/api/players/${encodeURIComponent(playerName)}/stop`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Error stopping player: ' + error.message, 'danger');
+            } finally {
+                setButtonLoading(playerName, 'stop', false);
+            }
+        }
+        
+        async function deletePlayer(playerName) {
+            if (!confirm(`Are you sure you want to delete player "${playerName}"? This action cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/players/${encodeURIComponent(playerName)}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    // Reload page to update player list
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Error deleting player: ' + error.message, 'danger');
+            }
+        }
+        
+        function editPlayer(playerName) {
+            // TODO: Implement edit functionality
+            showAlert('Edit functionality coming soon!', 'info');
+        }
+        
+        function refreshStatus() {
+            location.reload();
+        }
+        
+        // Handle add player form submission
+        document.getElementById('addPlayerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            try {
+                const response = await fetch('/api/players', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    document.getElementById('addPlayerModal').querySelector('.btn-close').click();
+                    e.target.reset();
+                    // Reload page to show new player
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Error creating player: ' + error.message, 'danger');
+            }
+        });
+        
+        // Auto-refresh device list when modal opens
+        document.getElementById('addPlayerModal').addEventListener('show.bs.modal', async function() {
+            try {
+                const response = await fetch('/api/devices');
+                const result = await response.json();
+                
+                const deviceSelect = document.getElementById('audioDevice');
+                deviceSelect.innerHTML = '<option value="">Select an audio device...</option>';
+                
+                result.devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.textContent = device.name;
+                    deviceSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        });
+    </script>
+</body>
+</html>

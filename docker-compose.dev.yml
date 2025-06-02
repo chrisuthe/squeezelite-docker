@@ -1,0 +1,29 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  squeezelite-multiroom:
+    build:
+      context: .
+      target: development  # If we had multi-stage builds
+    volumes:
+      # Mount source code for live development
+      - ./app:/app/app:ro
+      - ./app/templates:/app/templates:ro
+      - ./app/static:/app/static:ro
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8080:8080"
+      - "5678:5678"  # For debugger
+    command: python3 /app/app.py
+    # Override healthcheck for development
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 2
+      start_period: 10s

@@ -1,0 +1,54 @@
+# Example Player Configuration
+# This file shows the structure of a typical players.yaml configuration file
+# The actual file will be generated automatically when you create players through the web interface
+
+# Example configuration with two players:
+
+Living Room:
+  name: Living Room
+  device: hw:1,0  # USB DAC on card 1, device 0
+  server_ip: 192.168.1.100
+  mac_address: aa:bb:cc:dd:ee:01
+  enabled: true
+  volume: 75
+
+Kitchen:
+  name: Kitchen
+  device: hw:2,0  # USB DAC on card 2, device 0
+  server_ip: ""   # Empty means auto-discovery
+  mac_address: aa:bb:cc:dd:ee:02
+  enabled: true
+  volume: 80
+
+Bedroom:
+  name: Bedroom
+  device: default  # Use system default audio device
+  server_ip: 192.168.1.100
+  mac_address: aa:bb:cc:dd:ee:03
+  enabled: false   # Player exists but is disabled
+  volume: 60
+
+# Configuration field explanations:
+#
+# name: Display name for the player (must be unique)
+# device: Audio device identifier (use 'aplay -l' to see available devices)
+#   - hw:X,Y format for specific hardware devices
+#   - 'default' for system default
+#   - 'pulse' for PulseAudio (if available)
+# server_ip: IP address of Music Assistant server (empty for auto-discovery)
+# mac_address: Unique MAC address for the player (auto-generated if not specified)
+# enabled: Whether the player is enabled (true/false)
+# volume: Default volume level (0-100)
+
+# Common device examples:
+# hw:0,0 - First audio card, first device (usually built-in)
+# hw:1,0 - Second audio card, first device (often first USB device)
+# hw:2,0 - Third audio card, first device (often second USB device)
+# default - System default audio device
+# dmix - Software mixing device (allows multiple applications)
+
+# Notes:
+# - Each player needs a unique name and MAC address
+# - USB DACs typically appear as hw:X,0 where X > 0
+# - Use 'docker-compose exec squeezelite-multiroom aplay -l' to see devices from inside the container
+# - The web interface will show available devices automatically

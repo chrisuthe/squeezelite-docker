@@ -1,0 +1,39 @@
+version: '3.8'
+
+# Docker Compose configuration for environments without audio devices
+# Usage: docker-compose -f docker-compose.no-audio.yml up
+
+services:
+  squeezelite-multiroom:
+    build: .
+    container_name: squeezelite-multiroom-no-audio
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    # No audio devices mapped - container will use virtual/null devices
+    volumes:
+      # Persistent configuration storage
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - SQUEEZELITE_NO_AUDIO_OK=1
+      - SQUEEZELITE_WINDOWS_MODE=0
+      - SQUEEZELITE_CONTAINER=1
+    # Use bridge networking for better compatibility in no-audio environments
+    # network_mode: bridge  # Uncomment if host networking causes issues
+    privileged: false
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/players"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Optional: Create named volumes for persistence
+volumes:
+  squeezelite_config:
+    driver: local
+  squeezelite_logs:
+    driver: local

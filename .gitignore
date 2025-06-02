@@ -1,0 +1,69 @@
+# .gitignore for Squeezelite Multi-Room Docker
+
+# Runtime data
+config/players.yaml
+logs/*.log
+logs/supervisord.log
+logs/web-*.log
+logs/application.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Docker volumes
+.docker/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Testing
+.pytest_cache/
+.tox/
+
+# Documentation build
+docs/_build/
+site/
+
+# Keep directory structure but ignore contents
+logs/*
+!logs/.gitkeep
+config/*
+!config/players.yaml.example

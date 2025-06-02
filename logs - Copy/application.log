@@ -1,0 +1,32 @@
+2025-06-02 12:10:20,166 - __main__ - INFO - ==================================================
+2025-06-02 12:10:20,167 - __main__ - INFO - Starting Squeezelite Multi-Room Controller
+2025-06-02 12:10:20,167 - __main__ - INFO - Python version: 3.10.12 (main, Feb  4 2025, 14:57:36) [GCC 11.4.0]
+2025-06-02 12:10:20,167 - __main__ - INFO - Working directory: /app
+2025-06-02 12:10:20,167 - __main__ - INFO - Python path: ['/app', '/app', '/usr/lib/python310.zip', '/usr/lib/python3.10', '/usr/lib/python3.10/lib-dynload', '/usr/local/lib/python3.10/dist-packages', '/usr/lib/python3/dist-packages']
+2025-06-02 12:10:20,168 - __main__ - INFO - ==================================================
+2025-06-02 12:10:20,168 - __main__ - INFO - Testing imports...
+2025-06-02 12:10:20,168 - __main__ - INFO - Flask version: 2.3.3
+2025-06-02 12:10:21,395 - __main__ - INFO - ==================================================
+2025-06-02 12:10:21,395 - __main__ - INFO - Starting Squeezelite Multi-Room Controller
+2025-06-02 12:10:21,396 - __main__ - INFO - Python version: 3.10.12 (main, Feb  4 2025, 14:57:36) [GCC 11.4.0]
+2025-06-02 12:10:21,396 - __main__ - INFO - Working directory: /app
+2025-06-02 12:10:21,396 - __main__ - INFO - Python path: ['/app', '/app', '/usr/lib/python310.zip', '/usr/lib/python3.10', '/usr/lib/python3.10/lib-dynload', '/usr/local/lib/python3.10/dist-packages', '/usr/lib/python3/dist-packages']
+2025-06-02 12:10:21,396 - __main__ - INFO - ==================================================
+2025-06-02 12:10:21,396 - __main__ - INFO - Testing imports...
+2025-06-02 12:10:21,397 - __main__ - INFO - Flask version: 2.3.3
+2025-06-02 12:10:23,615 - __main__ - INFO - ==================================================
+2025-06-02 12:10:23,616 - __main__ - INFO - Starting Squeezelite Multi-Room Controller
+2025-06-02 12:10:23,616 - __main__ - INFO - Python version: 3.10.12 (main, Feb  4 2025, 14:57:36) [GCC 11.4.0]
+2025-06-02 12:10:23,616 - __main__ - INFO - Working directory: /app
+2025-06-02 12:10:23,616 - __main__ - INFO - Python path: ['/app', '/app', '/usr/lib/python310.zip', '/usr/lib/python3.10', '/usr/lib/python3.10/lib-dynload', '/usr/local/lib/python3.10/dist-packages', '/usr/lib/python3/dist-packages']
+2025-06-02 12:10:23,616 - __main__ - INFO - ==================================================
+2025-06-02 12:10:23,617 - __main__ - INFO - Testing imports...
+2025-06-02 12:10:23,617 - __main__ - INFO - Flask version: 2.3.3
+2025-06-02 12:10:26,842 - __main__ - INFO - ==================================================
+2025-06-02 12:10:26,842 - __main__ - INFO - Starting Squeezelite Multi-Room Controller
+2025-06-02 12:10:26,842 - __main__ - INFO - Python version: 3.10.12 (main, Feb  4 2025, 14:57:36) [GCC 11.4.0]
+2025-06-02 12:10:26,843 - __main__ - INFO - Working directory: /app
+2025-06-02 12:10:26,843 - __main__ - INFO - Python path: ['/app', '/app', '/usr/lib/python310.zip', '/usr/lib/python3.10', '/usr/lib/python3.10/lib-dynload', '/usr/local/lib/python3.10/dist-packages', '/usr/lib/python3/dist-packages']
+2025-06-02 12:10:26,843 - __main__ - INFO - ==================================================
+2025-06-02 12:10:26,843 - __main__ - INFO - Testing imports...
+2025-06-02 12:10:26,843 - __main__ - INFO - Flask version: 2.3.3

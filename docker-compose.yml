@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  squeezelite-multiroom:
+    build: .
+    container_name: squeezelite-multiroom
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    # Audio devices (optional - comment out if no audio hardware available)
+    devices:
+      # Pass through all audio devices (only if /dev/snd exists)
+      - /dev/snd:/dev/snd
+    volumes:
+      # Persistent configuration storage
+      - ./config:/app/config
+      - ./logs:/app/logs
+      # Pass through ALSA configuration (optional)
+      - /usr/share/alsa:/usr/share/alsa:ro
+      # Note: /etc/asound.conf might not exist, so we make it optional
+    environment:
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - DISPLAY=${DISPLAY}
+      - SQUEEZELITE_NO_AUDIO_OK=1
+    network_mode: host
+    privileged: false
+    cap_add:
+      - SYS_NICE
+    group_add:
+      - audio
+    user: "0:29"  # root user, audio group
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/players"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Optional: Create named volumes for persistence
+volumes:
+  squeezelite_config:
+    driver: local
+  squeezelite_logs:
+    driver: local
