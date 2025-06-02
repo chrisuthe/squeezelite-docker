@@ -75,8 +75,8 @@ check_audio() {
 
 # Build the Docker image
 build() {
-    print_status "Building Squeezelite Multi-Room Docker image..."
-    docker-compose build
+    print_status "Building Squeezelite Multi-Room Docker image (no cache)..."
+    docker-compose build --no-cache
     print_success "Build completed"
 }
 
@@ -152,9 +152,9 @@ clean() {
 
 # Development mode
 dev() {
-    print_status "Starting in development mode..."
+    print_status "Starting in development mode (no cache build)..."
     export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
-    docker-compose up --build
+    docker-compose up --build --no-cache
 }
 
 # Start services in no-audio mode

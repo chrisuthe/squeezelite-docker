@@ -12,7 +12,7 @@ docker-compose -f docker-compose.no-audio.yml down 2>nul
 docker system prune -f 2>nul
 
 echo.
-echo Rebuilding Docker image...
+echo Rebuilding Docker image (no cache)...
 docker-compose -f docker-compose.no-audio.yml build --no-cache
 
 echo.

@@ -132,7 +132,7 @@ function Start-Build {
         [string]$DockerfilePath = "Dockerfile"
     )
     
-    Write-Status "Building Squeezelite Multi-Room Docker image..."
+    Write-Status "Building Squeezelite Multi-Room Docker image (no cache)..."
     
     if (-not (Test-DockerStatus)) {
         exit 1
@@ -140,7 +140,7 @@ function Start-Build {
     
     # Try building with specified Dockerfile
     Write-Status "Using $DockerfilePath for build"
-    docker build -f $DockerfilePath -t squeezelite-multiroom .
+    docker build -f $DockerfilePath -t squeezelite-multiroom --no-cache .
     
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Build completed successfully"
@@ -165,7 +165,7 @@ function Start-Build {
 
 # Build with minimal Dockerfile
 function Start-MinimalBuild {
-    Write-Status "Building with minimal Dockerfile (reduced dependencies)..."
+    Write-Status "Building with minimal Dockerfile (reduced dependencies, no cache)..."
     
     if (-not (Test-Path "Dockerfile.minimal")) {
         Write-Error "Dockerfile.minimal not found. Please ensure it exists in the project directory."
@@ -328,9 +328,9 @@ function Remove-All {
 
 # Development mode
 function Start-Development {
-    Write-Status "Starting in development mode..."
+    Write-Status "Starting in development mode (no cache build)..."
     $env:COMPOSE_FILE = "docker-compose.yml;docker-compose.dev.yml"
-    docker-compose up --build
+    docker-compose up --build --no-cache
 }
 
 # Start services in no-audio mode

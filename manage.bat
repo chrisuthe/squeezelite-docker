@@ -21,11 +21,11 @@ if not "%1"=="" set "COMMAND=%1"
 goto :%COMMAND% 2>nul || goto :unknown_command
 
 :build
-echo %COLOR_INFO%[INFO]%COLOR_RESET% Building Squeezelite Multi-Room Docker image...
+echo %COLOR_INFO%[INFO]%COLOR_RESET% Building Squeezelite Multi-Room Docker image (no cache)...
 call :check_dependencies
 if errorlevel 1 exit /b 1
 call :setup_directories
-docker-compose build
+docker-compose build --no-cache
 if errorlevel 1 (
     echo %COLOR_ERROR%[ERROR]%COLOR_RESET% Build failed
     exit /b 1
@@ -100,12 +100,12 @@ if /i "!response!"=="y" (
 goto :eof
 
 :dev
-echo %COLOR_INFO%[INFO]%COLOR_RESET% Starting in development mode...
+echo %COLOR_INFO%[INFO]%COLOR_RESET% Starting in development mode (no cache build)...
 call :check_dependencies
 if errorlevel 1 exit /b 1
 call :setup_directories
 set COMPOSE_FILE=docker-compose.yml;docker-compose.dev.yml
-docker-compose up --build
+docker-compose up --build --no-cache
 goto :eof
 
 :no-audio

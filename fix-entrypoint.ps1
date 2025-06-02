@@ -14,7 +14,7 @@ docker-compose -f docker-compose.no-audio.yml down 2>$null
 docker system prune -f 2>$null
 
 Write-Host ""
-Write-Host "Rebuilding Docker image..." -ForegroundColor Yellow
+Write-Host "Rebuilding Docker image (no cache)..." -ForegroundColor Yellow
 docker-compose -f docker-compose.no-audio.yml build --no-cache
 
 Write-Host ""

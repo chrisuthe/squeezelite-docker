@@ -1,5 +1,7 @@
 # Squeezelite Multi-Room Docker Controller
 
+![ScreenShot](screenshot.jpg)
+
 A Docker container that runs multiple [squeezelite](https://github.com/ralph-irving/squeezelite) players with a web-based management interface, designed for multi-room audio setups with USB DACs and other audio devices.
 
 ![Multi-Room Audio Controller](https://img.shields.io/badge/Multi--Room-Audio%20Controller-blue?style=for-the-badge&logo=music)
