@@ -23,6 +23,9 @@ A Docker container that runs multiple [squeezelite](https://github.com/ralph-irv
 - **🔍 Auto-Discovery**: Automatic Music Assistant server discovery or manual configuration
 - **🖥️ Cross-Platform**: Works on Linux, Windows (Docker Desktop), and WSL2
 
+## DockerHub
+![DockerHub Images](https://hub.docker.com/r/chrisuthe/squeezelitemultiroom)
+
 ## 📋 Prerequisites
 
 ### Linux (Recommended)
