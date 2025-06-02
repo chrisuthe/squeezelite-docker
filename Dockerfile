@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     supervisor \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Try to install pulseaudio-utils (optional, may fail on some systems)
@@ -94,7 +95,10 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
 # Copy application files
 COPY app/ /app/
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Copy entrypoint script and ensure Unix line endings
 COPY entrypoint.sh /app/entrypoint.sh
+RUN dos2unix /app/entrypoint.sh 2>/dev/null || sed -i 's/\r$//' /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh /app/health_check.py
 
 # Create non-root user for squeezelite processes
