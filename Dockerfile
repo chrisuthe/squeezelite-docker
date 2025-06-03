@@ -3,83 +3,43 @@ FROM ubuntu:22.04
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Set up retry mechanism for apt-get
-RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries
-
-# Update package lists with retries
-RUN apt-get update --fix-missing || apt-get update --fix-missing || apt-get update
-
-# Install core system dependencies first
-RUN apt-get install -y --no-install-recommends \
+# Update and install all dependencies in single layer to avoid caching issues
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core system dependencies
     ca-certificates \
     curl \
     wget \
-    gnupg \
-    lsb-release \
-    && rm -rf /var/lib/apt/lists/*
-
-# Update package lists again after core packages
-RUN apt-get update
-
-# Install build dependencies
-RUN apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install audio development libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libasound2-dev \
-    libflac-dev \
-    libmad0-dev \
-    libvorbis-dev \
-    libfaad-dev \
-    libmpg123-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install runtime audio packages
-RUN apt-get update && apt-get install -y \
+    # Pre-built squeezelite with codec support
+    squeezelite \
+    # Audio system
     alsa-utils \
     alsa-base \
     libasound2 \
     libasound2-plugins \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python and supervisor
-RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Additional codec libraries for full format support
+    libflac8 \
+    libmad0 \
+    libvorbis0a \
+    libvorbisenc2 \
+    libvorbisfile3 \
+    libfaad2 \
+    libmpg123-0 \
+    libssl3 \
+    libogg0 \
+    libopus0 \
+    # Python environment
     python3 \
     python3-pip \
-    python3-venv \
     supervisor \
     dos2unix \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Try to install pulseaudio-utils (optional, may fail on some systems)
-RUN apt-get update && \
-    (apt-get install -y --no-install-recommends pulseaudio-utils || echo "PulseAudio utils not available, skipping") && \
-    rm -rf /var/lib/apt/lists/*
+# Simple verification that squeezelite exists and works
+RUN which squeezelite && echo "Squeezelite installed successfully"
 
-# Create application directory
+# Create application directory and required directories
 WORKDIR /app
-
-# Clone and build squeezelite with error handling
-RUN git clone https://github.com/ralph-irving/squeezelite.git /tmp/squeezelite || \
-    (echo "Failed to clone squeezelite repository. Trying alternative..." && \
-     wget -O /tmp/squeezelite.tar.gz https://github.com/ralph-irving/squeezelite/archive/refs/heads/master.tar.gz && \
-     cd /tmp && tar -xzf squeezelite.tar.gz && mv squeezelite-master squeezelite)
-
-# Build squeezelite
-RUN cd /tmp/squeezelite && \
-    make && \
-    cp squeezelite /usr/local/bin/ && \
-    chmod +x /usr/local/bin/squeezelite && \
-    rm -rf /tmp/squeezelite*
-
-# Verify squeezelite installation
-RUN squeezelite -? || echo "squeezelite installed successfully"
-
-# Create directories for configuration and data
 RUN mkdir -p /app/config /app/data /app/logs
 
 # Create basic ALSA configuration for virtual devices
@@ -87,7 +47,7 @@ RUN mkdir -p /usr/share/alsa && \
     echo 'pcm.null { type null }' > /usr/share/alsa/99-docker-virtual.conf && \
     echo 'ctl.null { type null }' >> /usr/share/alsa/99-docker-virtual.conf
 
-# Copy Python requirements and install dependencies
+# Copy and install Python requirements
 COPY requirements.txt /app/
 RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir -r requirements.txt
@@ -95,20 +55,22 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
 # Copy application files
 COPY app/ /app/
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Copy entrypoint script and ensure Unix line endings
 COPY entrypoint.sh /app/entrypoint.sh
-RUN dos2unix /app/entrypoint.sh 2>/dev/null || sed -i 's/\r$//' /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh /app/health_check.py
 
-# Create non-root user for squeezelite processes
-RUN useradd -r -s /bin/false squeezelite || true
+# Copy codec test script
+COPY quick-codec-test.sh /app/
+RUN chmod +x /app/quick-codec-test.sh
 
-# Add audio group and add root to it (for development/testing)
-RUN groupadd -f audio || true && \
+# Fix line endings and permissions
+RUN dos2unix /app/entrypoint.sh 2>/dev/null || sed -i 's/\r$//' /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh /app/health_check.py
+
+# Create user and groups
+RUN useradd -r -s /bin/false squeezelite || true && \
+    groupadd -f audio || true && \
     usermod -a -G audio root || true
 
-# Set environment variable to indicate this is a container
+# Set environment variables
 ENV SQUEEZELITE_CONTAINER=1
 
 # Expose web interface port
