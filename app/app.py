@@ -9,8 +9,9 @@ import yaml
 import psutil
 import traceback
 import re
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
 from flask_socketio import SocketIO, emit
+from flask_swagger_ui import get_swaggerui_blueprint
 import threading
 import time
 import logging
@@ -67,7 +68,28 @@ try:
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'squeezelite-multiroom-secret'
     socketio = SocketIO(app, cors_allowed_origins="*")
-    logger.info("Flask app and SocketIO initialized successfully")
+    
+    # Configure Swagger UI
+    SWAGGER_URL = '/api/docs'  # URL for exposing Swagger UI (without trailing '/')
+    API_URL = '/api/swagger.yaml'  # Our API url (can of course be a local resource)
+    
+    # Call factory function to create our blueprint
+    swaggerui_blueprint = get_swaggerui_blueprint(
+        SWAGGER_URL,  # Swagger UI static files will be mapped to '{SWAGGER_URL}/dist/'
+        API_URL,
+        config={  # Swagger UI config overrides
+            'app_name': "Squeezelite Multi-Room Controller API",
+            'layout': 'BaseLayout',
+            'deepLinking': True,
+            'showExtensions': True,
+            'showCommonExtensions': True
+        }
+    )
+    
+    # Register blueprint at URL
+    app.register_blueprint(swaggerui_blueprint)
+    
+    logger.info("Flask app, SocketIO, and Swagger UI initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Flask app: {e}")
     traceback.print_exc()
@@ -598,6 +620,15 @@ def index():
     statuses = manager.get_all_statuses()
     devices = manager.get_audio_devices()
     return render_template('index.html', players=players, statuses=statuses, devices=devices)
+
+@app.route('/api/swagger.yaml')
+def swagger_yaml():
+    """Serve the Swagger YAML specification"""
+    try:
+        return send_from_directory('/app', 'swagger.yaml')
+    except Exception as e:
+        logger.error(f"Error serving swagger.yaml: {e}")
+        return jsonify({'error': 'Swagger specification not found'}), 404
 
 @app.route('/api/players', methods=['GET'])
 def get_players():

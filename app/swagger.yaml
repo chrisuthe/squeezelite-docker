@@ -1,0 +1,560 @@
+openapi: 3.0.3
+info:
+  title: Squeezelite Multi-Room Controller API
+  description: |
+    A comprehensive API for managing multiple squeezelite audio players in a multi-room setup.
+    
+    ## Features
+    - 🎵 **Multi-room audio control** - Manage multiple squeezelite players
+    - 🔊 **Volume control** - Hardware ALSA mixer integration
+    - 🎛️ **Device management** - Auto-detect and configure audio devices
+    - 📱 **Real-time updates** - WebSocket support for live status updates
+    - 🔧 **Debug tools** - Audio device detection and troubleshooting
+    
+    ## Audio Devices
+    The API automatically detects available audio devices:
+    - **Hardware devices**: `hw:X,Y` format (e.g., `hw:1,0`)
+    - **Virtual devices**: `null`, `pulse`, `dmix`, `default`
+    - **USB devices**: Automatically detected with proper mixer controls
+    
+    ## Volume Control
+    Volume control uses ALSA mixer with automatic control detection:
+    - Tries multiple mixer controls: `Master`, `PCM`, `Speaker`, `Headphone`, `Digital`
+    - Returns specific control used in success messages
+    - Supports 0-100% volume range
+    
+  version: 1.0.0
+  contact:
+    name: Squeezelite Multi-Room Controller
+    url: https://github.com/ralph-irving/squeezelite
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://players.home.chrisuthe.com
+    description: Production server
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Players
+    description: Player management operations
+  - name: Devices
+    description: Audio device detection and management
+  - name: Volume
+    description: Volume control operations
+  - name: Debug
+    description: Debugging and troubleshooting tools
+
+paths:
+  /api/players:
+    get:
+      tags: [Players]
+      summary: Get all players
+      description: Retrieve a list of all configured squeezelite players with their current status
+      responses:
+        '200':
+          description: Successfully retrieved players
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  players:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/Player'
+                  statuses:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+                      description: Running status of each player
+              example:
+                players:
+                  Headphones:
+                    name: Headphones
+                    device: hw:1,0
+                    mac_address: dc:be:dd:e0:ce:40
+                    server_ip: 10.0.2.8
+                    enabled: true
+                    volume: 75
+                  ChrisRoom:
+                    name: ChrisRoom
+                    device: hw:0,3
+                    mac_address: 7d:69:c1:af:d8:78
+                    server_ip: 10.0.2.8
+                    enabled: true
+                    volume: 75
+                statuses:
+                  Headphones: true
+                  ChrisRoom: false
+    post:
+      tags: [Players]
+      summary: Create a new player
+      description: Create a new squeezelite player with specified configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlayerRequest'
+            example:
+              name: Living Room
+              device: hw:1,0
+              server_ip: 192.168.1.100
+              mac_address: aa:bb:cc:dd:ee:ff
+      responses:
+        '200':
+          description: Player created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/players/{playerName}:
+    put:
+      tags: [Players]
+      summary: Update a player
+      description: Update an existing player's configuration
+      parameters:
+        - $ref: '#/components/parameters/PlayerName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlayerRequest'
+      responses:
+        '200':
+          description: Player updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      new_name:
+                        type: string
+                        description: New player name (if changed)
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Players]
+      summary: Delete a player
+      description: Delete a player and stop it if running
+      parameters:
+        - $ref: '#/components/parameters/PlayerName'
+      responses:
+        '200':
+          description: Player deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/players/{playerName}/start:
+    post:
+      tags: [Players]
+      summary: Start a player
+      description: Start the squeezelite process for this player
+      parameters:
+        - $ref: '#/components/parameters/PlayerName'
+      responses:
+        '200':
+          description: Player started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: Player Headphones started successfully
+
+  /api/players/{playerName}/stop:
+    post:
+      tags: [Players]
+      summary: Stop a player
+      description: Stop the squeezelite process for this player
+      parameters:
+        - $ref: '#/components/parameters/PlayerName'
+      responses:
+        '200':
+          description: Player stopped successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/players/{playerName}/status:
+    get:
+      tags: [Players]
+      summary: Get player status
+      description: Check if a player is currently running
+      parameters:
+        - $ref: '#/components/parameters/PlayerName'
+      responses:
+        '200':
+          description: Player status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  running:
+                    type: boolean
+                    description: Whether the player is currently running
+              example:
+                running: true
+
+  /api/players/{playerName}/volume:
+    get:
+      tags: [Volume]
+      summary: Get player volume
+      description: |
+        Get the current volume level for a player. 
+        
+        For hardware devices, this reads the actual ALSA mixer volume.
+        For virtual devices, this returns the stored volume setting.
+      parameters:
+        - $ref: '#/components/parameters/PlayerName'
+      responses:
+        '200':
+          description: Volume retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  volume:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                    description: Current volume percentage
+              example:
+                success: true
+                volume: 75
+        '404':
+          description: Player not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Volume]
+      summary: Set player volume
+      description: |
+        Set the volume level for a player.
+        
+        For hardware devices, this uses ALSA mixer controls (`amixer`).
+        The system automatically tries multiple mixer controls:
+        - `Master` (most common)
+        - `PCM` (common for USB devices) 
+        - `Speaker` 
+        - `Headphone`
+        - `Digital`
+        
+        The response indicates which control was successfully used.
+      parameters:
+        - $ref: '#/components/parameters/PlayerName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - volume
+              properties:
+                volume:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  description: Volume percentage (0-100)
+                  example: 75
+      responses:
+        '200':
+          description: Volume set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: Volume set to 75% (PCM)
+        '400':
+          description: Invalid volume value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error (e.g., mixer control failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/devices:
+    get:
+      tags: [Devices]
+      summary: Get available audio devices
+      description: |
+        Retrieve a list of all available audio devices that can be used for squeezelite players.
+        
+        This includes both hardware devices (detected via `aplay -l`) and virtual devices.
+      responses:
+        '200':
+          description: Audio devices retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AudioDevice'
+              example:
+                devices:
+                  - id: hw:1,0
+                    name: Device (hw:1,0)
+                    card: "1"
+                    device: "0"
+                  - id: hw:0,3
+                    name: NVidia (hw:0,3)
+                    card: "0"
+                    device: "3"
+                  - id: null
+                    name: Null Audio Device (Silent)
+                    card: null
+                    device: "0"
+
+  /api/debug/audio:
+    get:
+      tags: [Debug]
+      summary: Debug audio system
+      description: |
+        Comprehensive debugging information for audio device detection and mixer controls.
+        
+        This endpoint provides detailed information about:
+        - Container mode (Windows vs Linux)
+        - Detected audio devices
+        - ALSA tool availability (`aplay`, `amixer`)
+        - Available mixer controls for each hardware device
+        - Raw command outputs for troubleshooting
+      responses:
+        '200':
+          description: Debug information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  container_mode:
+                    type: boolean
+                    description: Whether running in Windows compatibility mode
+                  detected_devices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AudioDevice'
+                  aplay_available:
+                    type: boolean
+                    description: Whether aplay command is available
+                  amixer_available:
+                    type: boolean
+                    description: Whether amixer command is available
+                  aplay_output:
+                    type: string
+                    description: Raw output from `aplay -l` command
+                  amixer_cards_output:
+                    type: string
+                    description: Raw output from `amixer` command
+                  mixer_controls:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+                    description: Available mixer controls for each hardware device
+              example:
+                container_mode: false
+                detected_devices:
+                  - id: hw:1,0
+                    name: Device (hw:1,0)
+                    card: "1"
+                    device: "0"
+                aplay_available: true
+                amixer_available: true
+                mixer_controls:
+                  "hw:1,0": ["PCM", "Speaker"]
+                  "hw:0,3": ["Master", "PCM"]
+
+components:
+  parameters:
+    PlayerName:
+      name: playerName
+      in: path
+      required: true
+      description: Name of the player
+      schema:
+        type: string
+      example: Headphones
+
+  schemas:
+    Player:
+      type: object
+      required:
+        - name
+        - device
+        - mac_address
+      properties:
+        name:
+          type: string
+          description: Display name of the player
+          example: Headphones
+        device:
+          type: string
+          description: Audio device identifier
+          example: hw:1,0
+        mac_address:
+          type: string
+          pattern: '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$'
+          description: MAC address for the player
+          example: dc:be:dd:e0:ce:40
+        server_ip:
+          type: string
+          description: Music Assistant server IP (optional)
+          example: 10.0.2.8
+        enabled:
+          type: boolean
+          description: Whether the player is enabled
+          default: true
+        volume:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Current volume percentage
+          default: 75
+
+    AudioDevice:
+      type: object
+      required:
+        - id
+        - name
+        - card
+        - device
+      properties:
+        id:
+          type: string
+          description: Device identifier used by ALSA
+          example: hw:1,0
+        name:
+          type: string
+          description: Human-readable device name
+          example: Device (hw:1,0)
+        card:
+          type: string
+          description: ALSA card number or identifier
+          example: "1"
+        device:
+          type: string
+          description: ALSA device number
+          example: "0"
+
+    CreatePlayerRequest:
+      type: object
+      required:
+        - name
+        - device
+      properties:
+        name:
+          type: string
+          description: Display name for the new player
+          example: Living Room
+        device:
+          type: string
+          description: Audio device identifier
+          example: hw:1,0
+        server_ip:
+          type: string
+          description: Music Assistant server IP (optional)
+          example: 192.168.1.100
+        mac_address:
+          type: string
+          pattern: '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$'
+          description: MAC address (optional - auto-generated if not provided)
+          example: aa:bb:cc:dd:ee:ff
+
+    UpdatePlayerRequest:
+      type: object
+      required:
+        - name
+        - device
+      properties:
+        name:
+          type: string
+          description: Display name for the player
+          example: Living Room Updated
+        device:
+          type: string
+          description: Audio device identifier
+          example: hw:1,0
+        server_ip:
+          type: string
+          description: Music Assistant server IP (optional)
+          example: 192.168.1.100
+        mac_address:
+          type: string
+          pattern: '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$'
+          description: MAC address (read-only, cannot be changed)
+          example: aa:bb:cc:dd:ee:ff
+
+    SuccessResponse:
+      type: object
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          description: Whether the operation was successful
+          example: true
+        message:
+          type: string
+          description: Human-readable success message
+          example: Operation completed successfully
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          description: Whether the operation was successful
+          example: false
+        message:
+          type: string
+          description: Human-readable error message
+          example: Player not found
