@@ -105,6 +105,22 @@
                                         </small>
                                     </div>
                                     
+                                    <div class="volume-control mb-3">
+                                        <label class="form-label small text-muted" for="volume-{{ name }}">Volume</label>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-volume-down text-muted me-2"></i>
+                                            <input type="range" 
+                                                   class="form-range flex-grow-1 mx-2" 
+                                                   min="0" 
+                                                   max="100" 
+                                                   value="{{ player.volume or 75 }}" 
+                                                   id="volume-{{ name }}" 
+                                                   data-player="{{ name }}">
+                                            <i class="fas fa-volume-up text-muted ms-2"></i>
+                                            <span class="volume-display ms-2 small text-muted" id="volume-display-{{ name }}">{{ player.volume or 75 }}%</span>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="d-grid">
                                         <button class="btn btn-success btn-action start-btn {% if statuses.get(name) %}d-none{% endif %}" data-player="{{ name }}" onclick="startPlayer('{{ name }}')">
                                             <i class="fas fa-play me-1"></i>Start
@@ -426,6 +442,92 @@
         function refreshStatus() {
             location.reload();
         }
+        
+        function updateVolumeDisplay(playerName, volume) {
+            const display = document.getElementById(`volume-display-${playerName}`);
+            if (display) {
+                display.textContent = volume + '%';
+            }
+        }
+        
+        async function setVolume(playerName, volume) {
+            try {
+                const response = await fetch(`/api/players/${encodeURIComponent(playerName)}/volume`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ volume: parseInt(volume) })
+                });
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    showAlert(result.message, 'warning');
+                    // Reset slider to previous value if setting failed
+                    loadPlayerVolume(playerName);
+                }
+            } catch (error) {
+                showAlert('Error setting volume: ' + error.message, 'danger');
+                // Reset slider to previous value if setting failed
+                loadPlayerVolume(playerName);
+            }
+        }
+        
+        async function loadPlayerVolume(playerName) {
+            try {
+                const response = await fetch(`/api/players/${encodeURIComponent(playerName)}/volume`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const slider = document.getElementById(`volume-${playerName}`);
+                    if (slider) {
+                        slider.value = result.volume;
+                        updateVolumeDisplay(playerName, result.volume);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading volume for', playerName, ':', error);
+            }
+        }
+        
+        // Load current volumes for all players on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            const volumeSliders = document.querySelectorAll('[id^="volume-"]');
+            volumeSliders.forEach(slider => {
+                const playerName = slider.dataset.player;
+                if (playerName) {
+                    loadPlayerVolume(playerName);
+                }
+            });
+        });
+        
+        // Debounce volume changes to avoid too many API calls
+        const volumeTimeouts = {};
+        function debouncedSetVolume(playerName, volume) {
+            updateVolumeDisplay(playerName, volume);
+            
+            if (volumeTimeouts[playerName]) {
+                clearTimeout(volumeTimeouts[playerName]);
+            }
+            
+            volumeTimeouts[playerName] = setTimeout(() => {
+                setVolume(playerName, volume);
+            }, 300); // Wait 300ms after user stops moving slider
+        }
+        
+        // Update the onchange handler to use debounced version
+        document.addEventListener('DOMContentLoaded', function() {
+            const volumeSliders = document.querySelectorAll('[id^="volume-"]');
+            volumeSliders.forEach(slider => {
+                slider.onchange = function() {
+                    const playerName = this.dataset.player;
+                    setVolume(playerName, this.value);
+                };
+                slider.oninput = function() {
+                    const playerName = this.dataset.player;
+                    updateVolumeDisplay(playerName, this.value);
+                };
+            });
+        });
         
         // Handle edit player form submission
         document.getElementById('editPlayerForm').addEventListener('submit', async function(e) {

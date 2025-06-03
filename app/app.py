@@ -8,6 +8,7 @@ import signal
 import yaml
 import psutil
 import traceback
+import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_socketio import SocketIO, emit
 import threading
@@ -124,9 +125,12 @@ class SqueezeliteManager:
         ]
         
         try:
+            logger.debug("Attempting to detect hardware audio devices with aplay -l")
             result = subprocess.run(['aplay', '-l'], 
                                   capture_output=True, text=True, check=True)
             devices = []
+            
+            logger.debug(f"aplay -l output:\n{result.stdout}")
             
             # Parse actual audio devices
             for line in result.stdout.split('\n'):
@@ -149,20 +153,22 @@ class SqueezeliteManager:
                                     'card': card_num,
                                     'device': device_num
                                 })
+                                logger.debug(f"Found hardware device: {device_name} -> {device_id}")
                         except (IndexError, ValueError) as e:
                             logger.warning(f"Error parsing audio device line: {line} - {e}")
                             continue
             
             # If we found real devices, add them to fallback devices
             if devices:
-                logger.info(f"Found {len(devices)} audio devices")
+                logger.info(f"Found {len(devices)} hardware audio devices")
                 return fallback_devices + devices
             else:
-                logger.warning("No hardware audio devices found, using fallback devices only")
+                logger.warning("No hardware audio devices found in aplay output, using fallback devices only")
                 return fallback_devices
                 
         except subprocess.CalledProcessError as e:
             logger.warning(f"Could not get audio devices list (aplay failed): {e}")
+            logger.debug(f"aplay stderr: {e.stderr.decode() if e.stderr else 'No stderr'}")
             return fallback_devices
         except FileNotFoundError:
             logger.warning("aplay command not found, using fallback devices only")
@@ -413,6 +419,167 @@ class SqueezeliteManager:
         for name in self.players:
             statuses[name] = self.get_player_status(name)
         return statuses
+    
+    def get_mixer_controls(self, device):
+        """Get available mixer controls for a device"""
+        if WINDOWS_MODE or device in ['null', 'pulse', 'dmix', 'default']:
+            # Return virtual controls for non-hardware devices
+            return ['Master', 'PCM']
+        
+        try:
+            # Extract card number from device ID
+            card_match = re.search(r'hw:([0-9]+)', device)
+            if not card_match:
+                return ['Master', 'PCM']
+            
+            card_num = card_match.group(1)
+            result = subprocess.run(['amixer', '-c', card_num, 'scontrols'], 
+                                  capture_output=True, text=True, check=True)
+            
+            controls = []
+            for line in result.stdout.split('\n'):
+                if "Simple mixer control" in line:
+                    # Extract control name from line like "Simple mixer control 'Master',0"
+                    match = re.search(r"'([^']+)'", line)
+                    if match:
+                        controls.append(match.group(1))
+            
+            return controls if controls else ['Master', 'PCM']
+            
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            logger.warning(f"Could not get mixer controls for device {device}: {e}")
+            return ['Master', 'PCM']
+    
+    def get_device_volume(self, device, control='Master'):
+        """Get the current volume for a device"""
+        if WINDOWS_MODE or device in ['null', 'pulse', 'dmix', 'default']:
+            # Return default volume for virtual devices
+            logger.debug(f"Virtual device {device}, returning default volume")
+            return 75
+        
+        try:
+            # Extract card number from device ID
+            card_match = re.search(r'hw:([0-9]+)', device)
+            if not card_match:
+                logger.debug(f"No card number found in device {device}, returning default volume")
+                return 75
+            
+            card_num = card_match.group(1)
+            
+            # Try multiple common control names
+            control_names = ['Master', 'PCM', 'Speaker', 'Headphone', 'Digital', 'Capture']
+            
+            for control_name in control_names:
+                try:
+                    result = subprocess.run(['amixer', '-c', card_num, 'sget', control_name], 
+                                          capture_output=True, text=True, check=True)
+                    
+                    # Parse volume from output like "[75%]"
+                    volume_match = re.search(r'\[(\d+)%\]', result.stdout)
+                    if volume_match:
+                        volume = int(volume_match.group(1))
+                        logger.debug(f"Got volume {volume}% for device {device} control {control_name}")
+                        return volume
+                except subprocess.CalledProcessError:
+                    continue  # Try next control name
+            
+            # If no controls worked, return default
+            logger.warning(f"Could not find working volume control for device {device}")
+            return 75
+                
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
+            logger.warning(f"Could not get volume for device {device}: {e}")
+            return 75
+    
+    def set_device_volume(self, device, volume, control='Master'):
+        """Set the volume for a device"""
+        if not 0 <= volume <= 100:
+            return False, "Volume must be between 0 and 100"
+        
+        if WINDOWS_MODE or device in ['null', 'pulse', 'dmix', 'default']:
+            # For virtual devices, just store the volume setting
+            logger.info(f"Virtual device {device}, volume {volume}% stored (no hardware control)")
+            return True, f"Volume set to {volume}% (virtual device)"
+        
+        try:
+            # Extract card number from device ID
+            card_match = re.search(r'hw:([0-9]+)', device)
+            if not card_match:
+                logger.debug(f"No card number found in device {device}, storing volume only")
+                return True, f"Volume set to {volume}% (no hardware control)"
+            
+            card_num = card_match.group(1)
+            
+            # Try multiple common control names
+            control_names = ['Master', 'PCM', 'Speaker', 'Headphone', 'Digital']
+            
+            for control_name in control_names:
+                try:
+                    result = subprocess.run(['amixer', '-c', card_num, 'sset', control_name, f'{volume}%'], 
+                                          capture_output=True, text=True, check=True)
+                    
+                    logger.info(f"Set volume to {volume}% for device {device} control {control_name}")
+                    return True, f"Volume set to {volume}% ({control_name})"
+                except subprocess.CalledProcessError as e:
+                    logger.debug(f"Control {control_name} failed for device {device}: {e}")
+                    continue  # Try next control name
+            
+            # If no controls worked
+            logger.warning(f"Could not find working volume control for device {device}")
+            return False, f"No working volume controls found for device {device}"
+            
+        except subprocess.CalledProcessError as e:
+            # Handle both string and bytes stderr
+            if hasattr(e, 'stderr') and e.stderr:
+                if isinstance(e.stderr, bytes):
+                    error_msg = e.stderr.decode()
+                else:
+                    error_msg = str(e.stderr)
+            else:
+                error_msg = str(e)
+            logger.warning(f"Could not set volume for device {device}: {error_msg}")
+            return False, f"Could not set volume: {error_msg}"
+        except FileNotFoundError:
+            logger.warning("amixer command not found")
+            return False, "Audio mixer control not available"
+    
+    def get_player_volume(self, name):
+        """Get the current volume for a player"""
+        if name not in self.players:
+            return None
+        
+        player = self.players[name]
+        device = player['device']
+        
+        # First try to get actual hardware volume
+        actual_volume = self.get_device_volume(device)
+        
+        # Update stored volume to match actual volume
+        if 'volume' not in player:
+            player['volume'] = actual_volume
+            self.save_config()
+        
+        return actual_volume
+    
+    def set_player_volume(self, name, volume):
+        """Set the volume for a player"""
+        if name not in self.players:
+            return False, "Player not found"
+        
+        if not 0 <= volume <= 100:
+            return False, "Volume must be between 0 and 100"
+        
+        player = self.players[name]
+        device = player['device']
+        
+        # Set the hardware volume
+        success, message = self.set_device_volume(device, volume)
+        
+        # Always update stored volume regardless of hardware control success
+        player['volume'] = volume
+        self.save_config()
+        
+        return success, message
 
 # Initialize the manager
 try:
@@ -501,6 +668,85 @@ def get_player_status(name):
     """API endpoint to get player status"""
     status = manager.get_player_status(name)
     return jsonify({'running': status})
+
+@app.route('/api/players/<n>/volume', methods=['GET'])
+def get_player_volume(n):
+    """API endpoint to get player volume"""
+    try:
+        volume = manager.get_player_volume(n)
+        if volume is None:
+            return jsonify({'success': False, 'message': 'Player not found'}), 404
+        return jsonify({'success': True, 'volume': volume})
+    except Exception as e:
+        logger.error(f"Error in get_player_volume for {n}: {e}")
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/players/<n>/volume', methods=['POST'])
+def set_player_volume(n):
+    """API endpoint to set player volume"""
+    try:
+        data = request.json
+        volume = data.get('volume')
+        
+        if volume is None:
+            return jsonify({'success': False, 'message': 'Volume is required'}), 400
+        
+        try:
+            volume = int(volume)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Volume must be a number'}), 400
+        
+        success, message = manager.set_player_volume(n, volume)
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        logger.error(f"Error in set_player_volume for {n}: {e}")
+        logger.error(f"Request data: {request.get_data()}")
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/debug/audio', methods=['GET'])
+def debug_audio():
+    """Debug endpoint to check audio device detection"""
+    try:
+        debug_info = {
+            'container_mode': WINDOWS_MODE,
+            'detected_devices': manager.get_audio_devices(),
+            'aplay_available': False,
+            'amixer_available': False,
+            'aplay_output': '',
+            'amixer_cards_output': '',
+            'mixer_controls': {}
+        }
+        
+        # Test aplay command
+        try:
+            result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, check=True)
+            debug_info['aplay_available'] = True
+            debug_info['aplay_output'] = result.stdout
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            debug_info['aplay_output'] = str(e)
+        
+        # Test amixer command
+        try:
+            result = subprocess.run(['amixer'], capture_output=True, text=True, check=True)
+            debug_info['amixer_available'] = True
+            debug_info['amixer_cards_output'] = result.stdout
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            debug_info['amixer_cards_output'] = str(e)
+        
+        # Test mixer controls for each detected hardware device
+        for device in debug_info['detected_devices']:
+            if device['id'].startswith('hw:'):
+                device_id = device['id']
+                try:
+                    controls = manager.get_mixer_controls(device_id)
+                    debug_info['mixer_controls'][device_id] = controls
+                except Exception as e:
+                    debug_info['mixer_controls'][device_id] = f"Error: {e}"
+        
+        return jsonify(debug_info)
+    except Exception as e:
+        logger.error(f"Error in debug_audio: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @socketio.on('connect')
 def handle_connect():

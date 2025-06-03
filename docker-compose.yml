@@ -7,10 +7,10 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-    # Audio devices (optional - comment out if no audio hardware available)
-    devices:
+    # Audio devices (Linux only - comment out for Windows development)
+    # devices:
       # Pass through all audio devices (only if /dev/snd exists)
-      - /dev/snd:/dev/snd
+      # - /dev/snd:/dev/snd
     volumes:
       # Persistent configuration storage
       - ./config:/app/config

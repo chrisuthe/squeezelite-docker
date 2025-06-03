@@ -57,10 +57,6 @@ COPY app/ /app/
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Copy codec test script
-COPY quick-codec-test.sh /app/
-RUN chmod +x /app/quick-codec-test.sh
-
 # Fix line endings and permissions
 RUN dos2unix /app/entrypoint.sh 2>/dev/null || sed -i 's/\r$//' /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh /app/health_check.py
