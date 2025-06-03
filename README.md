@@ -1,508 +1,377 @@
 # Squeezelite Multi-Room Docker Controller
 
-![ScreenShot](screenshot.png)
+![Squeezelite Multi-Room Controller](screenshot.png)
 
-A Docker container that runs multiple [squeezelite](https://github.com/ralph-irving/squeezelite) players with a web-based management interface, designed for multi-room audio setups with USB DACs and other audio devices.
-
->[!CAUTION]
->This project is generated entirely by Claude AI, do not assume code has been verified/written by a competent coder.
+A containerized multi-room audio solution that runs multiple [squeezelite](https://github.com/ralph-irving/squeezelite) players with an intuitive web management interface. Perfect for creating synchronized audio zones throughout your home using USB DACs, built-in audio, or network audio devices.
 
 ![Multi-Room Audio Controller](https://img.shields.io/badge/Multi--Room-Audio%20Controller-blue?style=for-the-badge&logo=music)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker)
-![Python](https://img.shields.io/badge/Python-Flask%20API-3776AB?style=for-the-badge&logo=python)
 ![Music Assistant](https://img.shields.io/badge/Music%20Assistant-Compatible-green?style=for-the-badge)
+![Real-time](https://img.shields.io/badge/Real--time-WebSocket%20Updates-orange?style=for-the-badge)
 
-## 🎵 Features
+## 🎯 Project Goals
 
-- **🏠 Multi-Room Support**: Create and manage multiple squeezelite players from a single container
-- **🌐 Web Interface**: Clean, responsive web UI for player management with real-time status updates
-- **🔌 USB DAC Support**: Automatic detection and configuration of USB DACs passed from the host
-- **📱 Real-time Control**: Live status updates via WebSocket connections
-- **💾 Persistent Configuration**: Player configurations survive container restarts
-- **🎛️ Device Management**: Easy audio device selection and mapping
-- **🔍 Auto-Discovery**: Automatic Music Assistant server discovery or manual configuration
-- **🖥️ Cross-Platform**: Works on Linux, Windows (Docker Desktop), and WSL2
+Transform any system with Docker into a powerful multi-room audio controller by:
+- **Centralizing Control**: Manage all your audio zones from one elegant web interface
+- **Simplifying Deployment**: One container handles multiple squeezelite players
+- **Enabling Flexibility**: Support various audio outputs from USB DACs to network streams
+- **Ensuring Reliability**: Persistent configuration with automatic player recovery
+- **Providing Integration**: Seamless compatibility with Music Assistant and LMS servers
 
-## DockerHub
-[DockerHub Images](https://hub.docker.com/r/chrisuthe/squeezelitemultiroom)
+## ✨ Key Features
 
-## 📋 Prerequisites
+### 🏠 **Multi-Room Audio Management**
+- Create unlimited squeezelite players in a single container
+- Individual volume control for each audio zone
+- Real-time status monitoring with WebSocket updates
+- Automatic player discovery by Music Assistant
 
-### Linux (Recommended)
-- Docker and Docker Compose installed
-- Music Assistant server running on your network
-- USB DACs or audio devices connected to the host system
-- Linux host system (required for proper audio device access)
+### 🎛️ **Intuitive Web Interface**
+- Modern, responsive design that works on all devices
+- Live status indicators and controls
+- Drag-and-drop simplicity for player management
+- Built-in audio device detection and selection
 
-### Windows
-- Docker Desktop for Windows with WSL2 backend
-- Windows 10 version 2004+ or Windows 11
-- PowerShell 5.1+ (for management scripts)
-- **Note**: Audio device passthrough is limited on Windows. See [Windows Setup](#windows-setup) section.
+### 🔌 **Comprehensive Audio Support**
+- **USB DACs**: Automatic detection of connected USB audio devices
+- **Built-in Audio**: Support for motherboard audio outputs
+- **HDMI Audio**: Multi-channel HDMI audio output support
+- **Network Audio**: PulseAudio and network streaming compatibility
+- **Virtual Devices**: Null and software mixing devices for testing
 
-## 🚀 Quick Start
+### 🔧 **Enterprise-Ready Features**
+- **REST API**: Full programmatic control with Swagger documentation
+- **Health Monitoring**: Built-in container health checks
+- **Logging**: Comprehensive logging for troubleshooting
+- **Backup/Restore**: Configuration persistence across container updates
+- **Cross-Platform**: Runs on Linux, Windows (Docker Desktop), and container orchestration platforms
 
-### Linux
+## 📦 Docker Hub Images
 
+**Ready-to-deploy images available at**: https://hub.docker.com/r/chrisuthe/squeezelitemultiroom
+
+### Quick Deployment
 ```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/squeezelite-docker.git
-cd squeezelite-docker
+# Basic deployment
+docker run -d \
+  --name squeezelite-multiroom \
+  -p 8080:8080 \
+  -v squeezelite_config:/app/config \
+  -v squeezelite_logs:/app/logs \
+  --device /dev/snd:/dev/snd \
+  chrisuthe/squeezelitemultiroom:latest
 
-# 2. Setup and build
-chmod +x manage.sh
-./manage.sh setup
-./manage.sh build
-
-# 3. Start the container
-./manage.sh start
-
-# 4. Access web interface
-open http://localhost:8080
+# Access web interface at http://localhost:8080
 ```
 
-### Windows
+### Container Platform Deployment
 
-```powershell
-# 1. Clone the repository
-git clone https://github.com/yourusername/squeezelite-docker.git
-cd squeezelite-docker
+#### TrueNAS Scale
+1. **Apps** → **Available Applications** → **Custom App**
+2. **Application Name**: `squeezelite-multiroom`
+3. **Image Repository**: `chrisuthe/squeezelitemultiroom`
+4. **Image Tag**: `latest`
+5. **Port Mapping**: Host Port `8080` → Container Port `8080`
+6. **Host Path Volumes**:
+   - `/mnt/pool/squeezelite/config` → `/app/config`
+   - `/mnt/pool/squeezelite/logs` → `/app/logs`
+7. **Device Mapping**: Host `/dev/snd` → Container `/dev/snd` (for audio)
 
-# 2. Setup and build (PowerShell - recommended)
-.\manage.ps1 setup
-.\manage.ps1 build
-.\manage.ps1 start
+#### Portainer
+1. **Containers** → **Add Container**
+2. **Name**: `squeezelite-multiroom`
+3. **Image**: `chrisuthe/squeezelitemultiroom:latest`
+4. **Port Mapping**: `8080:8080`
+5. **Volumes**:
+   - `squeezelite_config:/app/config`
+   - `squeezelite_logs:/app/logs`
+6. **Runtime & Resources** → **Devices**: `/dev/snd:/dev/snd`
 
-# Alternative: Using batch file
-manage.bat setup
-manage.bat build  
-manage.bat start
+#### Dockge
+Create a new stack with this `docker-compose.yml`:
 
-# 3. Access web interface
-start http://localhost:8080
+```yaml
+version: '3.8'
+services:
+  squeezelite-multiroom:
+    image: chrisuthe/squeezelitemultiroom:latest
+    container_name: squeezelite-multiroom
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    devices:
+      - /dev/snd:/dev/snd  # Audio device access
+    volumes:
+      - squeezelite_config:/app/config
+      - squeezelite_logs:/app/logs
+    environment:
+      - SQUEEZELITE_NO_AUDIO_OK=1  # Allow startup without audio devices
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/players"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  squeezelite_config:
+  squeezelite_logs:
 ```
 
-### First Player Setup
+## 🚀 Getting Started
 
-1. **Open Web Interface**: Navigate to `http://localhost:8080`
-2. **Add Player**: Click \"Add Player\" button
-3. **Configure**:
-   - **Name**: \"Living Room\" (or any unique name)
-   - **Audio Device**: Select from auto-detected devices
-   - **Music Assistant Server IP**: Leave empty for auto-discovery or enter server IP
-   - **MAC Address**: Leave empty to auto-generate
-4. **Create & Start**: Click \"Create Player\" then \"Start\"
-5. **Verify**: Player should appear in your Music Assistant interface
+### Prerequisites
+- Docker environment (Linux/Windows/macOS)
+- Music Assistant or Logitech Media Server
+- Audio devices (USB DACs, built-in audio, or network audio)
 
-## 🛠️ Management Commands
+### Step 1: Deploy Container
+Use one of the deployment methods above based on your platform.
 
-### Linux
-```bash
-./manage.sh start          # Start all services
-./manage.sh stop           # Stop all services  
-./manage.sh restart        # Restart all services
-./manage.sh build          # Build Docker image
-./manage.sh status         # Show service status
-./manage.sh logs           # View logs
-./manage.sh debug          # Run diagnostics
-./manage.sh no-audio       # Start without audio devices (testing)
-./manage.sh clean          # Clean up containers and images
-```
+### Step 2: Access Web Interface
+Navigate to `http://your-host-ip:8080`
 
-### Windows
-```powershell
-# PowerShell
-.\manage.ps1 start         # Start all services
-.\manage.ps1 stop          # Stop all services
-.\manage.ps1 restart       # Restart all services
-.\manage.ps1 build         # Build Docker image
-.\manage.ps1 build-minimal # Build with minimal dependencies (fallback)
-.\manage.ps1 build-debug   # Diagnose build issues
-.\manage.ps1 status        # Show service status
-.\manage.ps1 logs          # View logs
-.\manage.ps1 no-audio      # Start without audio devices (testing)
-.\manage.ps1 clean         # Clean up containers and images
+### Step 3: Create Your First Player
+1. Click **"Add Player"**
+2. **Name**: Enter a descriptive name (e.g., "Living Room", "Kitchen")
+3. **Audio Device**: Select from auto-detected devices
+4. **Music Assistant Server**: Leave empty for auto-discovery, or enter IP manually
+5. Click **"Create Player"**
 
-# Batch (alternative)
-manage.bat start           # Same commands available
-manage.bat build
-manage.bat status
-```
+### Step 4: Start Playing
+1. Click **"Start"** on your new player
+2. Player appears in Music Assistant as an available zone
+3. Begin streaming music to your multi-room setup!
 
-## 🔧 Detailed Setup
-
-### Audio Device Configuration
-
-Before running the container, ensure your USB DACs and audio devices are properly detected:
-
-```bash
-# Linux: List available audio devices
-aplay -l
-
-# Check device permissions
-ls -la /dev/snd/
-
-# Add user to audio group if needed
-sudo usermod -a -G audio $USER
-```
-
-### Container Configuration
-
-The system supports multiple Docker Compose configurations:
-
-- **`docker-compose.yml`**: Standard mode with audio devices
-- **`docker-compose.no-audio.yml`**: For environments without audio hardware
-- **`docker-compose.windows.yml`**: Windows-specific configuration
-- **`docker-compose.dev.yml`**: Development mode with live code reloading
+## 🔧 Configuration Options
 
 ### Environment Variables
-
 Customize container behavior:
 
 ```yaml
 environment:
-  - SQUEEZELITE_SERVER_IP=192.168.1.100    # Default Music Assistant server
-  - SQUEEZELITE_NAME_PREFIX=Docker         # Player name prefix
-  - SQUEEZELITE_NO_AUDIO_OK=1             # Allow running without audio devices
-  - WEB_PORT=8080                         # Web interface port
+  - SQUEEZELITE_NO_AUDIO_OK=1        # Allow startup without audio devices
+  - SQUEEZELITE_SERVER_IP=192.168.1.100  # Default Music Assistant server
+  - SQUEEZELITE_NAME_PREFIX=Docker    # Player name prefix
+  - WEB_PORT=8080                    # Web interface port (default: 8080)
+  - FLASK_ENV=production             # Production mode
 ```
 
-## 📖 Usage Guide
+### Volume Mounts
+Essential for persistent configuration:
 
-### Creating Players
+```yaml
+volumes:
+  - ./config:/app/config       # Player configurations
+  - ./logs:/app/logs          # Application logs
+  - /usr/share/alsa:/usr/share/alsa:ro  # ALSA configuration (Linux)
+```
 
-1. **Web Interface**: Navigate to `http://<host-ip>:8080`
-2. **Add Player**: Click \"Add Player\" button
-3. **Configure Player**:
-   - **Name**: Unique identifier (e.g., \"Kitchen\", \"Bedroom\")
-   - **Audio Device**: Select from auto-detected devices:
-     - `hw:X,Y` - Hardware devices (USB DACs, sound cards)
-     - `default` - System default audio device
-     - `null` - Silent device (for testing)
-     - `dmix` - Software mixing device
-   - **Server IP**: Music Assistant server (optional for auto-discovery)
-   - **MAC Address**: Unique identifier (auto-generated if empty)
+### Audio Device Access
+For hardware audio device support:
 
-### Managing Players
+```yaml
+devices:
+  - /dev/snd:/dev/snd          # All audio devices (Linux)
 
-- **Start/Stop**: Use buttons on each player card
-- **Real-time Status**: Status indicators show running state with live updates
-- **Delete**: Remove players you no longer need  
-- **Device Selection**: Choose from automatically detected audio devices
+# Alternative for specific devices:
+devices:
+  - /dev/snd/controlC0:/dev/snd/controlC0
+  - /dev/snd/pcmC0D0p:/dev/snd/pcmC0D0p
+```
 
-### Audio Device Types
+## 🎵 Usage Scenarios
 
-The system automatically detects:
-- **USB DACs**: External digital-to-analog converters
-- **Built-in Audio**: Motherboard audio cards
-- **HDMI Audio**: HDMI output devices
-- **Virtual Devices**: Software-based audio devices
+### Home Theater Setup
+```yaml
+# Multiple zones with different audio outputs
+Players:
+  "Living Room": hw:1,0    # USB DAC for main system
+  "Kitchen": hw:2,0        # Secondary USB DAC
+  "Bedroom": default       # Built-in audio
+  "Patio": pulse           # Network audio to outdoor speakers
+```
 
-## 🔍 API Reference
+### Apartment Setup
+```yaml
+# Synchronized audio with volume control
+Players:
+  "Main Room": hw:0,0      # Built-in audio
+  "Study": null            # Silent player for phone/tablet sync
+```
 
-The application exposes a REST API for automation and integration:
+### Office Environment
+```yaml
+# Background music with individual control
+Players:
+  "Reception": hw:1,0      # Reception area speakers
+  "Conference": hw:2,0     # Conference room audio
+  "Break Room": dmix       # Shared audio device
+```
 
-### Endpoints
+## 📊 Advanced Features
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/players` | List all players and their status |
-| `POST` | `/api/players` | Create a new player |
-| `DELETE` | `/api/players/<name>` | Delete a player |
-| `POST` | `/api/players/<name>/start` | Start a player |
-| `POST` | `/api/players/<name>/stop` | Stop a player |
-| `GET` | `/api/players/<name>/status` | Get player status |
-| `GET` | `/api/devices` | List available audio devices |
-
-### Example Usage
+### REST API Integration
+Full programmatic control available:
 
 ```bash
-# Create a new player
-curl -X POST http://localhost:8080/api/players \\
-  -H \"Content-Type: application/json\" \\
-  -d '{\"name\": \"Kitchen\", \"device\": \"hw:1,0\", \"server_ip\": \"192.168.1.100\"}'
-
-# Start a player
-curl -X POST http://localhost:8080/api/players/Kitchen/start
-
-# Get all players status
+# List all players
 curl http://localhost:8080/api/players
 
-# List available audio devices
-curl http://localhost:8080/api/devices
+# Create new player
+curl -X POST http://localhost:8080/api/players \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Patio", "device": "hw:3,0", "server_ip": "192.168.1.100"}'
+
+# Control volume
+curl -X POST http://localhost:8080/api/players/Patio/volume \
+  -H "Content-Type: application/json" \
+  -d '{"volume": 65}'
+
+# Start/stop players
+curl -X POST http://localhost:8080/api/players/Patio/start
+curl -X POST http://localhost:8080/api/players/Patio/stop
 ```
 
-## 🐛 Troubleshooting
+### Home Assistant Integration
+```yaml
+# configuration.yaml
+sensor:
+  - platform: rest
+    resource: http://squeezelite-host:8080/api/players
+    name: "Audio Zones"
+    json_attributes:
+      - players
+      - statuses
+    scan_interval: 30
 
-### Common Issues
+automation:
+  - alias: "Morning Music"
+    trigger:
+      platform: time
+      at: "07:00:00"
+    action:
+      service: rest_command.start_living_room_audio
 
-#### No Audio Devices Found
+rest_command:
+  start_living_room_audio:
+    url: http://squeezelite-host:8080/api/players/Living%20Room/start
+    method: POST
+```
+
+### Monitoring and Alerts
+The container provides comprehensive health monitoring:
+
 ```bash
-# Linux: Check if devices are accessible
-docker run --rm -it --device /dev/snd:/dev/snd ubuntu:22.04 aplay -l
+# Container health status
+docker inspect squeezelite-multiroom | grep Health -A 10
 
-# Check permissions
+# Application logs
+docker logs squeezelite-multiroom
+
+# Player-specific logs
+docker exec squeezelite-multiroom tail -f /app/logs/Living\ Room.log
+```
+
+## 🔍 Troubleshooting
+
+### No Audio Devices Detected
+**Linux**: Ensure audio devices are accessible
+```bash
+# Check available devices
+aplay -l
+
+# Verify device permissions
+ls -la /dev/snd/
+
+# Add user to audio group
 sudo usermod -a -G audio $USER
-# Logout and login again
 ```
 
-#### Player Won't Start
-- Verify audio device isn't in use by another application
-- Check Music Assistant server is accessible: `ping <server-ip>`
-- Review player logs in the web interface
-- Try using \"null\" device for testing
+**Windows**: Limited audio device passthrough
+- Use virtual audio devices like VB-Cable
+- Consider network audio streaming
+- Enable WSL2 integration for better compatibility
 
-#### Web Interface Not Accessible
-```bash
-# Check container status
-docker-compose ps
-
-# View logs
-./manage.sh logs              # Linux
-.\manage.ps1 logs            # Windows
-
-# Check port conflicts
-netstat -tlnp | grep 8080    # Linux
-netstat -an | findstr 8080   # Windows
-```
-
-#### Build Failures (Windows)
-```powershell
-# Try minimal build
-.\manage.ps1 build-minimal
-
-# Diagnose issues
-.\manage.ps1 build-debug
-
-# Check Docker Desktop DNS settings:
-# Docker Desktop → Settings → Docker Engine
-# Add: {\"dns\": [\"8.8.8.8\", \"8.8.4.4\"]}
-```
-
-### Debug Commands
-
-```bash
-# Linux
-./manage.sh debug           # Run comprehensive diagnostics
-./manage.sh logs            # View application logs
-docker-compose exec squeezelite-multiroom /bin/bash  # Shell access
-
-# Windows  
-.\manage.ps1 build-debug    # Diagnose build issues
-.\manage.ps1 logs           # View application logs
-docker-compose exec squeezelite-multiroom /bin/bash  # Shell access
-```
-
-### Testing Without Audio Hardware
-
-For development, testing, or environments without audio devices:
-
-```bash
-# Start in no-audio mode
-./manage.sh no-audio        # Linux
-.\manage.ps1 no-audio       # Windows
-
-# Create test players with \"null\" audio device
-# Players will start successfully but produce no sound
-```
-
-## 🖥️ Windows Setup
-
-### Docker Desktop Configuration
-
-1. **Enable WSL2 Backend**:
-   - Docker Desktop → Settings → General → \"Use WSL2 based engine\"
-
-2. **Configure Resources**:
-   - Go to Resources → Advanced
-   - Allocate minimum 2GB RAM, 2+ CPU cores
-
-3. **Network Settings**:
-   - If builds fail, try: Resources → Network
-   - Set DNS to: `8.8.8.8, 8.8.4.4`
-
-### Audio Limitations on Windows
-
-Docker on Windows has limited audio device passthrough. Alternatives:
-
-1. **WSL2 Integration** (Recommended):
+### Players Won't Start
+1. **Check audio device availability**:
    ```bash
-   # Install WSL2 Ubuntu
-   wsl --install -d Ubuntu
-   
-   # Run container in WSL2 for better Linux compatibility
+   docker exec squeezelite-multiroom aplay -l
    ```
 
-2. **Network Audio Streaming**:
-   - Use Music Assistant's network audio features
-   - Stream to network-attached audio devices
-   - Configure Snapcast for synchronous multi-room audio
+2. **Test with null device**:
+   - Create player with device `null` for testing
+   - Verify Music Assistant connectivity
 
-3. **Virtual Audio Devices**:
-   - VB-Cable for Windows audio routing
-   - VoiceMeeter for advanced audio mixing
+3. **Review logs**:
+   ```bash
+   docker exec squeezelite-multiroom tail -f /app/logs/application.log
+   ```
 
-### PowerShell Execution Policy
+### Network Connectivity Issues
+- Verify Music Assistant server IP and accessibility
+- Check container network mode (host mode recommended)
+- Ensure ports 8080 and audio streaming ports are open
 
-If you encounter script execution errors:
-
-```powershell
-# Enable script execution
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-
-# Or run with bypass
-PowerShell -ExecutionPolicy Bypass -File .\\manage.ps1 setup
-```
-
-## 🏗️ Development
-
-### Project Structure
-
-```
-squeezelite-docker/
-├── 📄 README.md                    # This file
-├── 📄 LICENSE                      # MIT License
-├── 📄 requirements.txt             # Python dependencies
-├── 🐳 Dockerfile                   # Main container build
-├── 🐳 Dockerfile.minimal           # Minimal build (Windows fallback)
-├── 🐳 docker-compose.yml           # Standard configuration
-├── 🐳 docker-compose.no-audio.yml  # No audio devices
-├── 🐳 docker-compose.windows.yml   # Windows-specific
-├── 🐳 docker-compose.dev.yml       # Development mode
-├── 🔧 supervisord.conf             # Process management
-├── 🚀 entrypoint.sh                # Container startup script
-├── 📁 app/                         # Flask application
-│   ├── 🐍 app.py                   # Main application
-│   ├── 🧪 health_check.py          # Container health validation
-│   ├── 📁 templates/
-│   │   └── 🌐 index.html           # Web interface
-│   └── 📁 static/
-│       └── 🎨 style.css            # Custom styles
-├── 📁 config/                      # Persistent configuration
-│   └── 📄 players.yaml.example     # Configuration example
-├── 📁 logs/                        # Application logs
-├── 🔧 manage.sh                    # Linux management script
-├── 🔧 manage.ps1                   # Windows PowerShell script
-├── 🔧 manage.bat                   # Windows batch script
-└── 🔧 debug.sh                     # Debug utilities
-```
+## 🏗️ Development and Building
 
 ### Building from Source
-
 ```bash
 # Clone repository
 git clone https://github.com/yourusername/squeezelite-docker.git
 cd squeezelite-docker
 
-# Development mode with live reloading
-./manage.sh dev               # Linux
-.\manage.ps1 dev             # Windows
-
-# Manual Docker build
+# Build container
 docker build -t squeezelite-multiroom .
 
-# Custom build with options
-docker build --build-arg SQUEEZELITE_VERSION=v1.9.9 -t my-squeezelite .
+# Run development version
+docker-compose -f docker-compose.dev.yml up
 ```
 
 ### Contributing
+1. Fork the repository on GitHub
+2. Create feature branch: `git checkout -b feature-name`
+3. Test thoroughly with various audio devices
+4. Submit pull request with clear description
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make changes and test thoroughly
-4. Submit a pull request
+## 📄 License and Credits
 
-## 🔒 Security Considerations
+**License**: MIT License - see [LICENSE](LICENSE) file
 
-- Container runs with minimal privileges
-- Audio device access limited to necessary devices  
-- No external network access beyond Music Assistant communication
-- Configuration files stored securely in mounted volumes
-- Web interface bound to localhost by default (change in production)
-
-## 📊 Advanced Configuration
-
-### Multiple Container Instances
-
-Run multiple instances for different zones:
-
-```yaml
-# docker-compose.override.yml
-version: '3.8'
-services:
-  squeezelite-zone1:
-    extends:
-      service: squeezelite-multiroom
-    ports:
-      - \"8081:8080\"
-    volumes:
-      - ./config-zone1:/app/config
-      
-  squeezelite-zone2:
-    extends:
-      service: squeezelite-multiroom  
-    ports:
-      - \"8082:8080\"
-    volumes:
-      - ./config-zone2:/app/config
-```
-
-### Production Deployment
-
-For production use:
-
-```yaml
-# docker-compose.prod.yml
-version: '3.8'
-services:
-  squeezelite-multiroom:
-    restart: always
-    logging:
-      driver: \"json-file\"
-      options:
-        max-size: \"10m\"
-        max-file: \"3\"
-    environment:
-      - FLASK_ENV=production
-```
-
-### Home Assistant Integration
-
-```yaml
-# configuration.yaml
-sensor:
-  - platform: rest
-    resource: http://localhost:8080/api/players
-    name: \"Squeezelite Players\"
-    json_attributes:
-      - players
-      - statuses
-    scan_interval: 30
-```
-
-## 🤝 Support and Contributing
-
-- **Issues**: Report bugs and request features via GitHub Issues
-- **Discussions**: Join community discussions for help and ideas
-- **Pull Requests**: Contributions welcome! See development section
-- **Documentation**: Help improve docs for better user experience
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Credits and Acknowledgments
-
+**Credits**:
 - **[Squeezelite](https://github.com/ralph-irving/squeezelite)** by Ralph Irving - The excellent audio player this project is built around
-- **[Music Assistant](https://music-assistant.io/)** - Modern music library management and multi-room audio
-- **Flask & SocketIO** - Web framework and real-time communication
-- **Docker** - Containerization platform
-- **Bootstrap** - Responsive web interface framework
+- **[Music Assistant](https://music-assistant.io/)** - Modern music library management and multi-room audio platform
+- **Flask Ecosystem** - Web framework and real-time communication libraries
+
+## 💬 Support and Community
+
+- **Issues**: Report bugs and request features via [GitHub Issues](https://github.com/yourusername/squeezelite-docker/issues)
+- **Discussions**: Community support and ideas via [GitHub Discussions](https://github.com/yourusername/squeezelite-docker/discussions)
+- **Docker Hub**: Pre-built images at https://hub.docker.com/r/chrisuthe/squeezelitemultiroom
+
+## 🎯 Use Cases
+
+**Perfect for**:
+- Home audio enthusiasts with multiple rooms
+- Apartment dwellers wanting synchronized audio
+- Office environments with background music needs
+- Integration with existing Music Assistant setups
+- Container-native deployments on NAS systems
+
+**Works with**:
+- Music Assistant (recommended)
+- Logitech Media Server (LMS)
+- Any SlimProto-compatible server
+- Local audio files and streaming services
 
 ---
 
-<div align=\"center\">
-  <b>🎵 Enjoy your multi-room audio setup! 🎵</b>
-  <br>
-  <sub>Built with ❤️ for the open-source community</sub>
+<div align="center">
+  
+**🎵 Transform your space into a connected audio experience 🎵**
+
+*Built with ❤️ for the open-source community*
+
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-chrisuthe%2Fsqueezelitemultiroom-blue?style=flat-square&logo=docker)](https://hub.docker.com/r/chrisuthe/squeezelitemultiroom)
+[![GitHub](https://img.shields.io/badge/GitHub-Source%20Code-black?style=flat-square&logo=github)](https://github.com/yourusername/squeezelite-docker)
+
 </div>
