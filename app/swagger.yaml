@@ -50,6 +50,8 @@ tags:
     description: Audio device detection and management
   - name: Volume
     description: Volume control operations
+  - name: State
+    description: State persistence operations (app_enhanced.py only)
   - name: Debug
     description: Debugging and troubleshooting tools
 
@@ -415,6 +417,71 @@ paths:
                   "hw:1,0": ["PCM", "Speaker"]
                   "hw:0,3": ["Master", "PCM"]
 
+  /api/state:
+    get:
+      tags: [State]
+      summary: Get state information
+      description: |
+        Get information about player state persistence.
+
+        **Note:** This endpoint is only available when running `app_enhanced.py`.
+        The enhanced app provides automatic state persistence, saving player
+        running states to `player_states.yaml` and restoring them on startup.
+
+        This is useful for:
+        - Checking if state persistence is active
+        - Monitoring how many players are running vs configured
+        - Verifying the state file exists
+      responses:
+        '200':
+          description: State information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateInfo'
+              example:
+                total_players: 4
+                running_players: 2
+                state_file_exists: true
+                last_state_save: "2024-01-15T10:30:00"
+
+  /api/state/save:
+    post:
+      tags: [State]
+      summary: Manually save player states
+      description: |
+        Manually trigger a save of current player running states.
+
+        **Note:** This endpoint is only available when running `app_enhanced.py`.
+
+        The enhanced app automatically saves state periodically (every 30 seconds
+        by default) and when players are started/stopped. This endpoint allows
+        forcing an immediate save, which can be useful:
+        - Before shutting down the container
+        - After batch configuration changes
+        - For backup purposes
+
+        The state is saved to `player_states.yaml` in the config directory.
+      responses:
+        '200':
+          description: State saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: State saved successfully
+        '500':
+          description: Failed to save state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: Failed to save state - permission denied
+
 components:
   parameters:
     PlayerName:
@@ -582,3 +649,34 @@ components:
           type: string
           description: Human-readable error message
           example: Player not found
+
+    StateInfo:
+      type: object
+      description: |
+        Information about player state persistence.
+        Only available when running app_enhanced.py.
+      required:
+        - total_players
+        - running_players
+        - state_file_exists
+      properties:
+        total_players:
+          type: integer
+          minimum: 0
+          description: Total number of configured players
+          example: 4
+        running_players:
+          type: integer
+          minimum: 0
+          description: Number of currently running players
+          example: 2
+        state_file_exists:
+          type: boolean
+          description: Whether the player_states.yaml file exists
+          example: true
+        last_state_save:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of last state save (null if never saved)
+          example: "2024-01-15T10:30:00"

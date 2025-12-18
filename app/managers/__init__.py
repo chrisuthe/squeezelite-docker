@@ -6,7 +6,12 @@ responsibilities, extracted from the original monolithic SqueezeliteManager.
 """
 
 from .audio_manager import AudioManager
-from .config_manager import ConfigManager
+from .config_manager import ConfigManager, ConfigValidationError
 from .process_manager import ProcessManager
 
-__all__ = ["ConfigManager", "AudioManager", "ProcessManager"]
+__all__ = [
+    "AudioManager",
+    "ConfigManager",
+    "ConfigValidationError",
+    "ProcessManager",
+]

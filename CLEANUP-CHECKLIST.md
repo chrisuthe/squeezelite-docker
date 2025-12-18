@@ -47,7 +47,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | 150 | MEDIUM | Magic number "3 seconds" delay before restore - document |
 | 211 | MEDIUM | Magic number "30 seconds" for state save interval - configure |
 | All | HIGH | Duplicate code from app.py - should inherit or share base class |
-| New endpoints | MEDIUM | `/api/state` and `/api/state/save` not in swagger.yaml |
+| ~~New endpoints~~ | ~~MEDIUM~~ | ~~`/api/state` and `/api/state/save` not in swagger.yaml~~ Done |
 
 ---
 
@@ -83,7 +83,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 
 | Issue | Priority | Description |
 |-------|----------|-------------|
-| Missing endpoints | MEDIUM | `/api/state`, `/api/state/save` from app_enhanced.py not documented |
+| ~~Missing endpoints~~ | ~~MEDIUM~~ | ~~`/api/state`, `/api/state/save` from app_enhanced.py not documented~~ Done |
 | Security section | ~~HIGH~~ | ~~No authentication/authorization documented~~ Won't fix (local network app) |
 | Error conditions | LOW | Could add more detail about error response scenarios |
 
@@ -122,7 +122,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | Item | Priority | Description |
 |------|----------|-------------|
 | Type hints | ~~HIGH~~ | ~~No Python type annotations anywhere~~ Done for SqueezeliteManager class |
-| Configuration schema | HIGH | No formal schema for players.yaml validation |
+| Configuration schema | ~~HIGH~~ | ~~No formal schema for players.yaml validation~~ Done - Pydantic schema in app/schemas/player_config.py |
 | Security docs | ~~HIGH~~ | ~~No documentation of hardcoded secrets or auth gaps~~ Secrets fixed; auth intentionally omitted |
 | Architecture docs | ~~MEDIUM~~ | ~~No design decision documentation~~ Done - see docs/ARCHITECTURE.md |
 | API examples in code | MEDIUM | Code only uses docstrings, relies on swagger.yaml |
@@ -159,7 +159,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 2. [x] ~~Add CSRF protection to Flask app~~ Won't fix - local network app without auth; marginal benefit
 3. [ ] Extract JavaScript from index.html to separate file
 4. [ ] Add input validation to all API endpoints
-5. [ ] Document app_enhanced.py endpoints in swagger.yaml
+5. [x] Document app_enhanced.py endpoints in swagger.yaml
 6. [ ] Add configuration for hardcoded squeezelite parameters
 
 ---
