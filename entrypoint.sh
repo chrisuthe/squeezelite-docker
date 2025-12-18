@@ -67,15 +67,28 @@ else
     echo "This is normal in environments without audio hardware"
 fi
 
-# Test squeezelite binary
-echo "Testing squeezelite binary..."
-if command -v squeezelite >/dev/null 2>&1; then
-    echo "squeezelite binary is available"
-    # Test with help command to verify it works
-    squeezelite -? >/dev/null 2>&1 || echo "Warning: squeezelite may not be properly installed"
+# Test audio player binaries
+echo "Testing audio player binaries..."
+if [ "$SENDSPIN_CONTAINER" = "1" ]; then
+    echo "  (Slim image - sendspin only)"
+    if command -v sendspin >/dev/null 2>&1; then
+        echo "✓ sendspin binary is available"
+    else
+        echo "✗ sendspin binary not found!"
+        echo "Container build may have failed"
+    fi
 else
-    echo "ERROR: squeezelite binary not found!"
-    echo "Container build may have failed"
+    echo "  (Full image - checking both players)"
+    if command -v squeezelite >/dev/null 2>&1; then
+        echo "✓ squeezelite binary is available"
+    else
+        echo "✗ squeezelite binary not found!"
+    fi
+    if command -v sendspin >/dev/null 2>&1; then
+        echo "✓ sendspin binary is available"
+    else
+        echo "✗ sendspin binary not found!"
+    fi
 fi
 
 # Test Python and dependencies

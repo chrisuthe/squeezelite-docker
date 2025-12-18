@@ -2,14 +2,16 @@
 """
 Container Health Check Script
 
-Validates that the Squeezelite Multi-Room container is properly configured
+Validates that the Multi Output Player container is properly configured
 and ready to run. Executed during container startup by entrypoint.sh.
 
 Tests Performed:
     1. Python Imports: Verifies Flask, SocketIO, PyYAML are available
     2. Directory Access: Checks /app/config, /app/logs, /app/data are writable
     3. Flask App: Tests basic Flask initialization and routing
-    4. Audio Commands: Verifies squeezelite binary exists and responds
+    4. Audio Commands: Verifies audio player binaries exist
+       - Full image: squeezelite and sendspin
+       - Slim image (SENDSPIN_CONTAINER=1): sendspin only
     5. Port Availability: Checks if port 8080 is available
 
 Exit Codes:
@@ -161,45 +163,66 @@ def test_audio_commands() -> bool:
     """
     Test that audio-related commands are available.
 
-    Verifies that the squeezelite binary exists and responds to commands.
-    This is critical for the container's core functionality.
-
-    Tests performed:
-        1. Check if squeezelite binary exists using 'which'
-        2. Verify squeezelite responds to help command (-?)
+    Checks for audio player binaries based on container type:
+        - Full image: Both squeezelite and sendspin should be available
+        - Slim image (SENDSPIN_CONTAINER=1): Only sendspin required
 
     Returns:
-        True if squeezelite is found and responsive, False otherwise.
+        True if required audio binaries are found, False otherwise.
 
     Side Effects:
         - Prints test results to stdout
-        - Executes external commands (which, squeezelite)
+        - Executes external commands (which, binary --help)
     """
     print("\nTesting audio commands...")
 
-    try:
-        import subprocess
+    import shutil
+    import subprocess
 
-        # Test if squeezelite binary exists
-        result = subprocess.run(["which", "squeezelite"], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✓ squeezelite binary found at: {result.stdout.strip()}")
+    is_slim = os.environ.get("SENDSPIN_CONTAINER") == "1"
+
+    if is_slim:
+        print("  (Slim image - checking sendspin only)")
+    else:
+        print("  (Full image - checking squeezelite and sendspin)")
+
+    all_passed = True
+
+    # Check sendspin (required for both full and slim)
+    sendspin_path = shutil.which("sendspin")
+    if sendspin_path:
+        print(f"✓ sendspin binary found at: {sendspin_path}")
+        try:
+            subprocess.run(["sendspin", "--help"], capture_output=True, text=True, timeout=5)
+            print("✓ sendspin binary responds to commands")
+        except subprocess.TimeoutExpired:
+            print("✗ sendspin command timed out")
+            all_passed = False
+        except Exception as e:
+            print(f"⚠ sendspin help check failed: {e}")
+    else:
+        print("✗ sendspin binary not found")
+        all_passed = False
+
+    # Check squeezelite (only required for full image)
+    if not is_slim:
+        squeezelite_path = shutil.which("squeezelite")
+        if squeezelite_path:
+            print(f"✓ squeezelite binary found at: {squeezelite_path}")
+            try:
+                # squeezelite -? exits non-zero but should not crash
+                subprocess.run(["squeezelite", "-?"], capture_output=True, text=True, timeout=5)
+                print("✓ squeezelite binary responds to commands")
+            except subprocess.TimeoutExpired:
+                print("✗ squeezelite command timed out")
+                all_passed = False
+            except Exception as e:
+                print(f"⚠ squeezelite help check failed: {e}")
         else:
             print("✗ squeezelite binary not found")
-            return False
+            all_passed = False
 
-        # Test squeezelite help (should exit with non-zero but not crash)
-        result = subprocess.run(["squeezelite", "-?"], capture_output=True, text=True, timeout=5)
-        print("✓ squeezelite binary responds to commands")
-
-    except subprocess.TimeoutExpired:
-        print("✗ squeezelite command timed out")
-        return False
-    except Exception as e:
-        print(f"✗ Audio command test failed: {e}")
-        return False
-
-    return True
+    return all_passed
 
 
 def test_port_availability() -> bool:
@@ -253,7 +276,7 @@ def main() -> None:
         - Prints test progress and results to stdout
         - Calls sys.exit() with appropriate exit code
     """
-    print("Squeezelite Multi-Room Container Health Check")
+    print("Multi Output Player Container Health Check")
     print("=" * 50)
 
     tests = [
