@@ -1,4 +1,7 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
+
+# Ubuntu 24.04 LTS provides Python 3.12 (required for sendspin CLI)
+# and includes up-to-date audio packages
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -35,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Simple verification that squeezelite exists and works
+# Verify squeezelite installation
 RUN which squeezelite && echo "Squeezelite installed successfully"
 
 # Create application directory and required directories
@@ -48,9 +51,13 @@ RUN mkdir -p /usr/share/alsa && \
     echo 'ctl.null { type null }' >> /usr/share/alsa/99-docker-virtual.conf
 
 # Copy and install Python requirements
+# Note: --break-system-packages is required on Ubuntu 24.04 (PEP 668)
 COPY requirements.txt /app/
-RUN pip3 install --no-cache-dir --upgrade pip && \
-    pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages --upgrade pip && \
+    pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Verify sendspin installation
+RUN which sendspin && sendspin --version && echo "Sendspin installed successfully"
 
 # Copy application files
 COPY app/ /app/
