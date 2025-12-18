@@ -657,30 +657,38 @@ def get_portaudio_devices():
             if line and not line.startswith("Available"):
                 # Lines are typically like "0: Device Name" or just device info
                 devices.append({"raw": line})
-        return jsonify({
-            "success": True,
-            "devices": devices,
-            "raw_output": result.stdout,
-            "note": "Use device index (0, 1, 2) or name prefix with --audio-device for sendspin",
-        })
+        return jsonify(
+            {
+                "success": True,
+                "devices": devices,
+                "raw_output": result.stdout,
+                "note": "Use device index (0, 1, 2) or name prefix with --audio-device for sendspin",
+            }
+        )
     except FileNotFoundError:
-        return jsonify({
-            "success": False,
-            "message": "sendspin binary not found",
-            "devices": [],
-        })
+        return jsonify(
+            {
+                "success": False,
+                "message": "sendspin binary not found",
+                "devices": [],
+            }
+        )
     except subprocess.TimeoutExpired:
-        return jsonify({
-            "success": False,
-            "message": "Timeout listing audio devices",
-            "devices": [],
-        })
+        return jsonify(
+            {
+                "success": False,
+                "message": "Timeout listing audio devices",
+                "devices": [],
+            }
+        )
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "message": str(e),
-            "devices": [],
-        })
+        return jsonify(
+            {
+                "success": False,
+                "message": str(e),
+                "devices": [],
+            }
+        )
 
 
 @app.route("/api/providers", methods=["GET"])
