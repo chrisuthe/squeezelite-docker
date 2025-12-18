@@ -7,27 +7,30 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Update and install all dependencies in single layer to avoid caching issues
+# Note: Ubuntu 24.04 has package name changes (time64 transition: libasound2 -> libasound2t64, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core system dependencies
     ca-certificates \
     curl \
     wget \
-    # Pre-built squeezelite with codec support
+    # Pre-built squeezelite with codec support (pulls in most audio deps)
     squeezelite \
-    # Audio system
+    # Audio system (Ubuntu 24.04 package names)
     alsa-utils \
     alsa-base \
-    libasound2 \
+    libasound2t64 \
     libasound2-plugins \
-    # Additional codec libraries for full format support
-    libflac8 \
+    # PortAudio for sendspin (sounddevice dependency)
+    libportaudio2 \
+    # Additional codec libraries for full format support (Ubuntu 24.04 versions)
+    libflac12t64 \
     libmad0 \
     libvorbis0a \
     libvorbisenc2 \
     libvorbisfile3 \
     libfaad2 \
-    libmpg123-0 \
-    libssl3 \
+    libmpg123-0t64 \
+    libssl3t64 \
     libogg0 \
     libopus0 \
     # Python environment
@@ -52,12 +55,12 @@ RUN mkdir -p /usr/share/alsa && \
 
 # Copy and install Python requirements
 # Note: --break-system-packages is required on Ubuntu 24.04 (PEP 668)
+# Don't upgrade pip - system pip 24.0 is sufficient and can't be upgraded in-place
 COPY requirements.txt /app/
-RUN pip3 install --no-cache-dir --break-system-packages --upgrade pip && \
-    pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
-# Verify sendspin installation
-RUN which sendspin && sendspin --version && echo "Sendspin installed successfully"
+# Verify sendspin installation (no --version flag, just check it runs)
+RUN which sendspin && sendspin --help > /dev/null && echo "Sendspin installed successfully"
 
 # Copy application files
 COPY app/ /app/
