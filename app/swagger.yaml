@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Squeezelite Multi-Room Controller API
+  title: Multi Output Player API
   description: |
     A comprehensive API for managing multiple audio players in a multi-room setup.
     Supports both Squeezelite (LMS/SlimProto) and Sendspin (Music Assistant native) players.
@@ -31,7 +31,7 @@ info:
     
   version: 1.0.0
   contact:
-    name: Squeezelite Multi-Room Controller
+    name: Multi Output Player
     url: https://github.com/ralph-irving/squeezelite
   license:
     name: MIT

@@ -2,7 +2,7 @@
 
 # Squeezelite Docker Entrypoint Script
 
-echo "Starting Squeezelite Multi-Room Controller..."
+echo "Starting Multi Output Player..."
 
 # Set default values for environment variables (if not provided)
 export SECRET_KEY="${SECRET_KEY:-squeezelite-multiroom-secret}"
@@ -97,7 +97,7 @@ fi
 
 # Show startup information
 echo ""
-echo "=== Squeezelite Multi-Room Controller Starting ==="
+echo "=== Multi Output Player Starting ==="
 echo "Web interface will be available at: http://localhost:8080"
 echo "Log location: /app/logs/"
 echo "Config location: /app/config/"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Squeezelite Multi-Room Controller - Enhanced Version with State Persistence
+Multi Output Player - Enhanced Version with State Persistence
 
 Extended version of app.py that adds automatic state persistence and restoration.
 When the container restarts, previously running players are automatically restarted.
@@ -132,7 +132,7 @@ logger = logging.getLogger(__name__)
 
 # Log startup information
 logger.info("=" * 50)
-logger.info("Starting Squeezelite Multi-Room Controller")
+logger.info("Starting Multi Output Player")
 logger.info(f"Python version: {sys.version}")
 logger.info(f"Working directory: {os.getcwd()}")
 logger.info(f"Python path: {sys.path}")
@@ -183,7 +183,7 @@ try:
         SWAGGER_URL,  # Swagger UI static files will be mapped to '{SWAGGER_URL}/dist/'
         API_URL,
         config={  # Swagger UI config overrides
-            "app_name": "Squeezelite Multi-Room Controller API",
+            "app_name": "Multi Output Player API",
             "layout": "BaseLayout",
             "deepLinking": True,
             "showExtensions": True,
