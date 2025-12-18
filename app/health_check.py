@@ -17,7 +17,11 @@ def test_imports():
     
     try:
         import flask_socketio
-        print(f"✓ Flask-SocketIO {flask_socketio.__version__}")
+        try:
+            version = flask_socketio.__version__
+        except AttributeError:
+            version = "(version not available)"
+        print(f"✓ Flask-SocketIO {version}")
     except ImportError as e:
         print(f"✗ Flask-SocketIO import failed: {e}")
         return False
