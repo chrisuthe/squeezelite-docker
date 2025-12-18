@@ -11,8 +11,7 @@ import os
 from typing import Any
 
 import yaml
-
-from app.schemas.player_config import (
+from schemas.player_config import (
     validate_player_config,
     validate_players_file,
 )
