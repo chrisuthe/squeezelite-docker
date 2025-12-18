@@ -20,9 +20,10 @@ Usage:
     python3 health_check.py
 """
 
-import sys
 import os
+import sys
 import traceback
+
 
 def test_imports() -> bool:
     """
@@ -38,16 +39,18 @@ def test_imports() -> bool:
         - Prints import status for each package to stdout
     """
     print("Testing Python imports...")
-    
+
     try:
         import flask
+
         print(f"✓ Flask {flask.__version__}")
     except ImportError as e:
         print(f"✗ Flask import failed: {e}")
         return False
-    
+
     try:
         import flask_socketio
+
         try:
             version = flask_socketio.__version__
         except AttributeError:
@@ -56,15 +59,17 @@ def test_imports() -> bool:
     except ImportError as e:
         print(f"✗ Flask-SocketIO import failed: {e}")
         return False
-    
+
     try:
-        import yaml
+        import yaml  # noqa: F401 - intentionally testing import availability
+
         print("✓ PyYAML")
     except ImportError as e:
         print(f"✗ PyYAML import failed: {e}")
         return False
-    
+
     return True
+
 
 def test_directories() -> bool:
     """
@@ -87,22 +92,23 @@ def test_directories() -> bool:
         - Prints directory status to stdout
     """
     print("\nTesting directories...")
-    
-    dirs = ['/app/config', '/app/logs', '/app/data']
+
+    dirs = ["/app/config", "/app/logs", "/app/data"]
     for directory in dirs:
         try:
             os.makedirs(directory, exist_ok=True)
             # Test write permission
-            test_file = os.path.join(directory, 'test_write')
-            with open(test_file, 'w') as f:
-                f.write('test')
+            test_file = os.path.join(directory, "test_write")
+            with open(test_file, "w") as f:
+                f.write("test")
             os.remove(test_file)
             print(f"✓ {directory} (writable)")
         except Exception as e:
             print(f"✗ {directory}: {e}")
             return False
-    
+
     return True
+
 
 def test_flask_app() -> bool:
     """
@@ -123,31 +129,33 @@ def test_flask_app() -> bool:
         application to isolate initialization testing.
     """
     print("\nTesting Flask app initialization...")
-    
+
     try:
         from flask import Flask
+
         app = Flask(__name__)
         print("✓ Flask app creation")
-        
-        @app.route('/test')
+
+        @app.route("/test")
         def test():
-            return 'OK'
-        
+            return "OK"
+
         # Test the app context
         with app.test_client() as client:
-            response = client.get('/test')
+            response = client.get("/test")
             if response.status_code == 200:
                 print("✓ Flask app routing")
             else:
                 print(f"✗ Flask app routing failed: {response.status_code}")
                 return False
-                
+
     except Exception as e:
         print(f"✗ Flask app initialization failed: {e}")
         traceback.print_exc()
         return False
-    
+
     return True
+
 
 def test_audio_commands() -> bool:
     """
@@ -168,32 +176,31 @@ def test_audio_commands() -> bool:
         - Executes external commands (which, squeezelite)
     """
     print("\nTesting audio commands...")
-    
+
     try:
         import subprocess
-        
+
         # Test if squeezelite binary exists
-        result = subprocess.run(['which', 'squeezelite'], 
-                              capture_output=True, text=True)
+        result = subprocess.run(["which", "squeezelite"], capture_output=True, text=True)
         if result.returncode == 0:
             print(f"✓ squeezelite binary found at: {result.stdout.strip()}")
         else:
             print("✗ squeezelite binary not found")
             return False
-        
+
         # Test squeezelite help (should exit with non-zero but not crash)
-        result = subprocess.run(['squeezelite', '-?'], 
-                              capture_output=True, text=True, timeout=5)
+        result = subprocess.run(["squeezelite", "-?"], capture_output=True, text=True, timeout=5)
         print("✓ squeezelite binary responds to commands")
-        
+
     except subprocess.TimeoutExpired:
         print("✗ squeezelite command timed out")
         return False
     except Exception as e:
         print(f"✗ Audio command test failed: {e}")
         return False
-    
+
     return True
+
 
 def test_port_availability() -> bool:
     """
@@ -210,24 +217,26 @@ def test_port_availability() -> bool:
         - Creates and closes a TCP socket connection attempt
     """
     print("\nTesting port availability...")
-    
+
     try:
         import socket
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1)
-        result = sock.connect_ex(('localhost', 8080))
+        result = sock.connect_ex(("localhost", 8080))
         sock.close()
-        
+
         if result == 0:
             print("⚠ Port 8080 is already in use")
             return False
         else:
             print("✓ Port 8080 is available")
             return True
-            
+
     except Exception as e:
         print(f"✗ Port test failed: {e}")
         return False
+
 
 def main() -> None:
     """
@@ -246,18 +255,18 @@ def main() -> None:
     """
     print("Squeezelite Multi-Room Container Health Check")
     print("=" * 50)
-    
+
     tests = [
         ("Python Imports", test_imports),
-        ("Directory Access", test_directories), 
+        ("Directory Access", test_directories),
         ("Flask App", test_flask_app),
         ("Audio Commands", test_audio_commands),
         ("Port Availability", test_port_availability),
     ]
-    
+
     passed = 0
     total = len(tests)
-    
+
     for test_name, test_func in tests:
         try:
             if test_func():
@@ -267,10 +276,10 @@ def main() -> None:
         except Exception as e:
             print(f"\n❌ {test_name} test crashed: {e}")
             traceback.print_exc()
-    
+
     print("\n" + "=" * 50)
     print(f"Health Check Results: {passed}/{total} tests passed")
-    
+
     if passed == total:
         print("✅ Container is healthy and ready to start")
         sys.exit(0)
@@ -278,5 +287,6 @@ def main() -> None:
         print("❌ Container has issues that need to be resolved")
         sys.exit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

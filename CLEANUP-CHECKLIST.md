@@ -135,7 +135,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 |------|----------|-------------|
 | Unit tests | HIGH | No unit tests exist |
 | Integration tests | HIGH | No integration tests |
-| Linting | MEDIUM | No .flake8 or .pylintrc configuration |
+| Linting | ~~MEDIUM~~ | ~~No .flake8 or .pylintrc configuration~~ Done - Ruff configured in pyproject.toml |
 | Type checking | MEDIUM | No mypy configuration |
 | Security scanning | HIGH | No bandit or safety configuration |
 
@@ -182,7 +182,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | **Documentation Coverage** | ~90% (comprehensive docstrings in all Python files) |
 | **Type Coverage** | ~80% (SqueezeliteManager class and health_check fully typed) |
 | **Test Coverage** | 0% (no tests) |
-| **Linting Score** | Unknown (no linting configured) |
+| **Linting Score** | ✓ Passing (Ruff configured) |
 
 ---
 
@@ -196,7 +196,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 ### Phase 2: Code Quality
 1. ~~Add Python type hints~~ ✓ Done (SqueezeliteManager class fully typed)
 2. ~~Add module/function documentation~~ ✓ Done (comprehensive docstrings in app.py, app_enhanced.py, health_check.py)
-3. Configure linting (flake8, pylint)
+3. ~~Configure linting (flake8, pylint)~~ ✓ Done (Ruff configured with pyproject.toml + GitHub Actions workflow)
 4. Split SqueezeliteManager class
 
 ### Phase 3: Testing

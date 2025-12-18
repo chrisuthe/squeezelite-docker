@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(ruff check:*)",
+      "Bash(pushd:*)",
+      "Bash(popd)",
+      "Bash(ruff format:*)"
     ]
   }
 }

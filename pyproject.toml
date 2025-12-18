@@ -1,0 +1,54 @@
+[project]
+name = "squeezelite-multiroom"
+version = "1.0.0"
+description = "Multi-room Squeezelite audio player manager"
+requires-python = ">=3.10"
+
+[tool.ruff]
+# Target Python 3.10 (Ubuntu 22.04 default)
+target-version = "py310"
+
+# Line length to match common standards
+line-length = 120
+
+# Exclude common non-source directories
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+]
+
+[tool.ruff.lint]
+# Start with a reasonable set of rules, can tighten later
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes (unused imports, variables, etc.)
+    "I",      # isort (import sorting)
+    "B",      # flake8-bugbear (common bugs)
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade (modern Python syntax)
+    "SIM",    # flake8-simplify
+]
+
+# Ignore rules that are too noisy for this codebase
+ignore = [
+    "E501",   # line too long - handled by formatter, not linter
+    "B008",   # function call in default argument - common in Flask
+    "SIM108", # ternary operator - sometimes less readable
+]
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
