@@ -4,6 +4,11 @@
 
 echo "Starting Squeezelite Multi-Room Controller..."
 
+# Set default values for environment variables (if not provided)
+export SECRET_KEY="${SECRET_KEY:-squeezelite-multiroom-secret}"
+export SUPERVISOR_USER="${SUPERVISOR_USER:-admin}"
+export SUPERVISOR_PASSWORD="${SUPERVISOR_PASSWORD:-admin}"
+
 # Set permissions for audio devices (if they exist)
 if [ -d "/dev/snd" ]; then
     echo "Audio devices found - setting up permissions..."

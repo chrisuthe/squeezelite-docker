@@ -17,6 +17,10 @@ services:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
       - PYTHONUNBUFFERED=1
+      # Security: Uncomment and change these for production
+      # - SECRET_KEY=your-secure-random-key-here
+      # - SUPERVISOR_USER=admin
+      # - SUPERVISOR_PASSWORD=change-this-password
     ports:
       - "8080:8080"
       - "5678:5678"  # For debugger

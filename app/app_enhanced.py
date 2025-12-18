@@ -67,7 +67,7 @@ for directory in required_dirs:
 
 try:
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'squeezelite-multiroom-secret'
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'squeezelite-multiroom-secret')
     socketio = SocketIO(app, cors_allowed_origins="*")
     
     # Configure Swagger UI

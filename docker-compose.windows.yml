@@ -26,6 +26,10 @@ services:
       - SQUEEZELITE_NO_AUDIO_OK=1
       - SQUEEZELITE_CONTAINER=1
       - PYTHONUNBUFFERED=1
+      # Security: Uncomment and change these for production
+      # - SECRET_KEY=your-secure-random-key-here
+      # - SUPERVISOR_USER=admin
+      # - SUPERVISOR_PASSWORD=change-this-password
     
     # Override volumes for Windows paths
     volumes:

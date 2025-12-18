@@ -19,6 +19,10 @@ services:
       - SQUEEZELITE_NO_AUDIO_OK=1
       - SQUEEZELITE_WINDOWS_MODE=0
       - SQUEEZELITE_CONTAINER=1
+      # Security: Uncomment and change these for production
+      # - SECRET_KEY=your-secure-random-key-here
+      # - SUPERVISOR_USER=admin
+      # - SUPERVISOR_PASSWORD=change-this-password
     # Use bridge networking for better compatibility in no-audio environments
     # network_mode: bridge  # Uncomment if host networking causes issues
     privileged: false
