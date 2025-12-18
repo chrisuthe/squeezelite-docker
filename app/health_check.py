@@ -24,8 +24,19 @@ import sys
 import os
 import traceback
 
-def test_imports():
-    """Test all required Python imports"""
+def test_imports() -> bool:
+    """
+    Test that all required Python packages are importable.
+
+    Verifies that Flask, Flask-SocketIO, and PyYAML can be imported.
+    These are critical dependencies for the main application.
+
+    Returns:
+        True if all imports succeed, False if any import fails.
+
+    Side Effects:
+        - Prints import status for each package to stdout
+    """
     print("Testing Python imports...")
     
     try:
@@ -55,8 +66,26 @@ def test_imports():
     
     return True
 
-def test_directories():
-    """Test that required directories exist and are writable"""
+def test_directories() -> bool:
+    """
+    Test that required directories exist and are writable.
+
+    Creates directories if they don't exist, then verifies write permissions
+    by creating and removing a test file in each directory.
+
+    Directories tested:
+        - /app/config: Player configuration storage
+        - /app/logs: Application and player logs
+        - /app/data: Persistent data storage
+
+    Returns:
+        True if all directories are accessible and writable, False otherwise.
+
+    Side Effects:
+        - Creates directories if they don't exist
+        - Creates and removes temporary test files
+        - Prints directory status to stdout
+    """
     print("\nTesting directories...")
     
     dirs = ['/app/config', '/app/logs', '/app/data']
@@ -75,8 +104,24 @@ def test_directories():
     
     return True
 
-def test_flask_app():
-    """Test basic Flask app initialization"""
+def test_flask_app() -> bool:
+    """
+    Test basic Flask application initialization and routing.
+
+    Creates a minimal Flask application, adds a test route, and verifies
+    the routing system works by making a test request.
+
+    Returns:
+        True if Flask app initializes and routes correctly, False otherwise.
+
+    Side Effects:
+        - Prints test results to stdout
+        - Prints stack trace on error
+
+    Note:
+        This test creates a temporary Flask app separate from the main
+        application to isolate initialization testing.
+    """
     print("\nTesting Flask app initialization...")
     
     try:
@@ -104,8 +149,24 @@ def test_flask_app():
     
     return True
 
-def test_audio_commands():
-    """Test audio-related commands"""
+def test_audio_commands() -> bool:
+    """
+    Test that audio-related commands are available.
+
+    Verifies that the squeezelite binary exists and responds to commands.
+    This is critical for the container's core functionality.
+
+    Tests performed:
+        1. Check if squeezelite binary exists using 'which'
+        2. Verify squeezelite responds to help command (-?)
+
+    Returns:
+        True if squeezelite is found and responsive, False otherwise.
+
+    Side Effects:
+        - Prints test results to stdout
+        - Executes external commands (which, squeezelite)
+    """
     print("\nTesting audio commands...")
     
     try:
@@ -134,8 +195,20 @@ def test_audio_commands():
     
     return True
 
-def test_port_availability():
-    """Test if port 8080 is available"""
+def test_port_availability() -> bool:
+    """
+    Test if port 8080 is available for the web server.
+
+    Attempts to connect to localhost:8080 to check if another process
+    is already using the port. The Flask application needs this port.
+
+    Returns:
+        True if port 8080 is available, False if already in use.
+
+    Side Effects:
+        - Prints port status to stdout
+        - Creates and closes a TCP socket connection attempt
+    """
     print("\nTesting port availability...")
     
     try:
@@ -156,8 +229,21 @@ def test_port_availability():
         print(f"✗ Port test failed: {e}")
         return False
 
-def main():
-    """Run all tests"""
+def main() -> None:
+    """
+    Run all health check tests and report results.
+
+    Executes each test function in sequence, tracks pass/fail counts,
+    and exits with appropriate code for container orchestration.
+
+    Exit Codes:
+        0: All tests passed - container is healthy
+        1: One or more tests failed - container needs attention
+
+    Side Effects:
+        - Prints test progress and results to stdout
+        - Calls sys.exit() with appropriate exit code
+    """
     print("Squeezelite Multi-Room Container Health Check")
     print("=" * 50)
     

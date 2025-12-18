@@ -211,15 +211,54 @@ os.makedirs(PLAYERS_DIR, exist_ok=True)
 os.makedirs('/app/logs', exist_ok=True)
 
 class SqueezeliteManager:
-    def __init__(self):
+    """
+    Enhanced Squeezelite Manager with State Persistence.
+
+    Extends the base SqueezeliteManager functionality with:
+    - Automatic state persistence (saves running players to disk)
+    - State restoration on startup (restarts previously running players)
+    - Thread-safe state operations using a lock
+    - Graceful shutdown handling
+    - Periodic background state saving
+
+    Attributes:
+        players (dict): Dictionary mapping player names to their configuration.
+        processes (dict): Dictionary mapping player names to subprocess.Popen objects.
+        state_lock (threading.Lock): Lock for thread-safe state file operations.
+
+    State File:
+        Player states are saved to STATE_FILE (/app/config/player_states.yaml)
+        containing timestamp, running_players list, and total_players count.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize the Enhanced SqueezeliteManager.
+
+        Creates player/process dictionaries, initializes thread lock, loads
+        configuration, and attempts to restore previous running states.
+
+        Side Effects:
+            - Reads CONFIG_FILE and STATE_FILE if they exist
+            - May start background thread to restore player states
+        """
         self.players = {}
         self.processes = {}
         self.state_lock = threading.Lock()  # Thread safety for state operations
         self.load_config()
         self.load_state()  # NEW: Load previous running states
-    
-    def load_config(self):
-        """Load player configuration from YAML file"""
+
+    def load_config(self) -> None:
+        """
+        Load player configuration from the YAML configuration file.
+
+        Reads CONFIG_FILE (/app/config/players.yaml) and populates self.players.
+        If the file doesn't exist or is invalid, initializes empty dict.
+
+        Side Effects:
+            - Modifies self.players dictionary
+            - Logs errors if loading fails
+        """
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, 'r') as f:
@@ -230,16 +269,38 @@ class SqueezeliteManager:
         else:
             self.players = {}
     
-    def save_config(self):
-        """Save player configuration to YAML file"""
+    def save_config(self) -> None:
+        """
+        Save current player configuration to the YAML configuration file.
+
+        Writes self.players to CONFIG_FILE in human-readable YAML format.
+
+        Side Effects:
+            - Writes to CONFIG_FILE (/app/config/players.yaml)
+            - Logs errors if writing fails
+        """
         try:
             with open(CONFIG_FILE, 'w') as f:
                 yaml.dump(self.players, f, default_flow_style=False)
         except Exception as e:
             logger.error(f"Error saving config: {e}")
     
-    def load_state(self):
-        """NEW: Load player running states from state file"""
+    def load_state(self) -> None:
+        """
+        Load and restore player running states from the state file.
+
+        Reads STATE_FILE to find which players were running before shutdown.
+        Only restores if the state file is recent (within STATE_FRESHNESS_TIMEOUT_SECS).
+        Restoration is performed in a background thread to avoid blocking startup.
+
+        Side Effects:
+            - May start background thread (_restore_player_states) to restart players
+            - Logs state restoration progress
+
+        Note:
+            States older than STATE_FRESHNESS_TIMEOUT_SECS are ignored to prevent
+            restoring stale data from old or failed shutdowns.
+        """
         if os.path.exists(STATE_FILE):
             try:
                 with open(STATE_FILE, 'r') as f:
@@ -273,8 +334,23 @@ class SqueezeliteManager:
         else:
             logger.info("No previous state file found")
     
-    def save_state(self):
-        """NEW: Save current player running states to state file"""
+    def save_state(self) -> None:
+        """
+        Save current player running states to the state file.
+
+        Writes which players are currently running to STATE_FILE along with
+        a timestamp. Uses thread lock for safe concurrent access.
+
+        State file format:
+            timestamp: ISO format datetime
+            running_players: List of player names currently running
+            total_players: Total number of configured players
+
+        Side Effects:
+            - Writes to STATE_FILE (/app/config/player_states.yaml)
+            - Acquires state_lock during write
+            - Logs errors if writing fails
+        """
         try:
             with self.state_lock:
                 running_players = []
@@ -296,8 +372,25 @@ class SqueezeliteManager:
         except Exception as e:
             logger.error(f"Error saving state: {e}")
     
-    def _restore_player_states(self, running_players):
-        """NEW: Restore player states in background thread"""
+    def _restore_player_states(self, running_players: list) -> None:
+        """
+        Restore player states in a background thread.
+
+        Called by load_state() to restart players that were running before
+        shutdown. Waits for system initialization before attempting restarts.
+
+        Args:
+            running_players: List of player names to restore.
+
+        Side Effects:
+            - Starts player processes for each player in the list
+            - Logs restoration progress and failures
+            - Saves updated state after restoration completes
+
+        Note:
+            Players that no longer exist in configuration are skipped.
+            Brief delay between player starts prevents system overload.
+        """
         # Wait a moment for the system to fully initialize
         time.sleep(STATE_RESTORE_DELAY_SECS)
         
@@ -332,8 +425,21 @@ class SqueezeliteManager:
         # Update state file to reflect current status
         self.save_state()
     
-    def auto_save_state_periodically(self):
-        """NEW: Periodically save state (called by background thread)"""
+    def auto_save_state_periodically(self) -> None:
+        """
+        Periodically save player state to disk.
+
+        Designed to run in a background daemon thread. Saves state every
+        STATE_SAVE_INTERVAL_SECS seconds. On error, waits STATE_SAVE_ERROR_DELAY_SECS
+        before retrying.
+
+        Side Effects:
+            - Writes to STATE_FILE periodically
+            - Runs indefinitely until process terminates
+
+        Note:
+            This method never returns; it should only be called from a daemon thread.
+        """
         while True:
             try:
                 time.sleep(STATE_SAVE_INTERVAL_SECS)
@@ -342,8 +448,24 @@ class SqueezeliteManager:
                 logger.error(f"Error in periodic state save: {e}")
                 time.sleep(STATE_SAVE_ERROR_DELAY_SECS)
     
-    def get_audio_devices(self):
-        """Get list of available audio devices"""
+    def get_audio_devices(self) -> list:
+        """
+        Get list of available audio output devices.
+
+        Detects hardware audio devices using ALSA's aplay command and combines
+        them with fallback virtual devices (null, default, dmix).
+
+        Returns:
+            List of device dictionaries, each containing:
+            - id: ALSA device identifier (e.g., 'hw:0,0', 'null')
+            - name: Human-readable device name
+            - card: ALSA card number
+            - device: ALSA device number
+
+        Note:
+            In WINDOWS_MODE, returns simulated devices for testing.
+            Always includes fallback devices even if hardware detection fails.
+        """
         if WINDOWS_MODE:
             logger.info("Windows mode detected - returning simulated audio devices")
             return [
@@ -412,8 +534,24 @@ class SqueezeliteManager:
             logger.error(f"Unexpected error getting audio devices: {e}")
             return fallback_devices
     
-    def create_player(self, name, device, server_ip='', mac_address=''):
-        """Create a new squeezelite player"""
+    def create_player(self, name: str, device: str, server_ip: str = '', mac_address: str = '') -> tuple:
+        """
+        Create a new squeezelite player configuration.
+
+        Args:
+            name: Unique name for the player (used as identifier).
+            device: ALSA device ID (e.g., 'hw:0,0', 'null').
+            server_ip: Optional Logitech Media Server IP address.
+            mac_address: Optional MAC address. Auto-generated if empty.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Side Effects:
+            - Adds player to self.players
+            - Saves configuration to disk
+            - Saves state to disk
+        """
         if name in self.players:
             return False, "Player with this name already exists"
         
@@ -438,8 +576,27 @@ class SqueezeliteManager:
         self.save_state()  # NEW: Save state when configuration changes
         return True, "Player created successfully"
     
-    def update_player(self, old_name, new_name, device, server_ip='', mac_address=''):
-        """Update an existing squeezelite player"""
+    def update_player(self, old_name: str, new_name: str, device: str, server_ip: str = '', mac_address: str = '') -> tuple:
+        """
+        Update an existing squeezelite player configuration.
+
+        Stops the player if running, updates configuration, and restarts if needed.
+
+        Args:
+            old_name: Current name of the player to update.
+            new_name: New name for the player (can be same as old_name).
+            device: ALSA device ID (e.g., 'hw:0,0', 'null').
+            server_ip: Optional Logitech Media Server IP address.
+            mac_address: Optional new MAC address (keeps existing if empty).
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Side Effects:
+            - Stops player if running, restarts after update
+            - Updates self.players dictionary
+            - Saves configuration and state to disk
+        """
         if old_name not in self.players:
             return False, "Player not found"
         
@@ -486,8 +643,23 @@ class SqueezeliteManager:
         self.save_state()  # NEW: Save state after update
         return True, "Player updated successfully"
     
-    def delete_player(self, name):
-        """Delete a player"""
+    def delete_player(self, name: str) -> tuple:
+        """
+        Delete a player configuration.
+
+        Stops the player if running and removes from configuration.
+
+        Args:
+            name: Name of the player to delete.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Side Effects:
+            - Stops player process if running
+            - Removes player from self.players
+            - Saves configuration and state to disk
+        """
         if name not in self.players:
             return False, "Player not found"
         
@@ -500,8 +672,24 @@ class SqueezeliteManager:
         self.save_state()  # NEW: Save state when configuration changes
         return True, "Player deleted successfully"
     
-    def start_player(self, name):
-        """Start a squeezelite player process"""
+    def start_player(self, name: str) -> tuple:
+        """
+        Start a squeezelite player process.
+
+        Launches squeezelite subprocess with the player's configuration.
+        Falls back to null device if the configured audio device fails.
+
+        Args:
+            name: Name of the player to start.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Side Effects:
+            - Creates subprocess and adds to self.processes
+            - Creates log file at /app/logs/{name}.log
+            - Saves state to disk on successful start
+        """
         if name not in self.players:
             return False, "Player not found"
         
@@ -612,8 +800,23 @@ class SqueezeliteManager:
             logger.error(f"Error starting player {name}: {e}")
             return False, f"Error starting player: {e}"
     
-    def stop_player(self, name):
-        """Stop a squeezelite player process"""
+    def stop_player(self, name: str) -> tuple:
+        """
+        Stop a squeezelite player process.
+
+        Sends SIGTERM for graceful shutdown; SIGKILL if process doesn't respond.
+
+        Args:
+            name: Name of the player to stop.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Side Effects:
+            - Terminates player subprocess
+            - Removes from self.processes
+            - Saves state to disk
+        """
         if name not in self.processes:
             return False, "Player not running"
         
@@ -649,23 +852,47 @@ class SqueezeliteManager:
             logger.error(f"Error stopping player {name}: {e}")
             return False, f"Error stopping player: {e}"
     
-    def get_player_status(self, name):
-        """Get the running status of a player"""
+    def get_player_status(self, name: str) -> bool:
+        """
+        Get the running status of a player.
+
+        Args:
+            name: Name of the player to check.
+
+        Returns:
+            True if player process is running, False otherwise.
+        """
         if name not in self.processes:
             return False
         
         process = self.processes[name]
         return process.poll() is None
     
-    def get_all_statuses(self):
-        """Get status of all players"""
+    def get_all_statuses(self) -> dict:
+        """
+        Get running status of all configured players.
+
+        Returns:
+            Dictionary mapping player names to their running status (bool).
+        """
         statuses = {}
         for name in self.players:
             statuses[name] = self.get_player_status(name)
         return statuses
     
-    def stop_all_players(self):
-        """NEW: Stop all running players (useful for graceful shutdown)"""
+    def stop_all_players(self) -> int:
+        """
+        Stop all running players.
+
+        Used during graceful shutdown to cleanly terminate all player processes.
+
+        Returns:
+            Number of players successfully stopped.
+
+        Side Effects:
+            - Terminates all running player subprocesses
+            - Saves final state to disk
+        """
         stopped_count = 0
         for name in list(self.processes.keys()):
             if self.get_player_status(name):
@@ -677,8 +904,19 @@ class SqueezeliteManager:
         self.save_state()  # Save final state
         return stopped_count
     
-    def get_state_info(self):
-        """NEW: Get information about current state and state file"""
+    def get_state_info(self) -> dict:
+        """
+        Get information about current state and state file.
+
+        Provides debugging/monitoring information about the state persistence system.
+
+        Returns:
+            Dictionary containing:
+            - total_players: Number of configured players
+            - running_players: Number of currently running players
+            - state_file_exists: Whether STATE_FILE exists
+            - last_state_save: ISO timestamp of last state file modification
+        """
         state_info = {
             'total_players': len(self.players),
             'running_players': len([name for name in self.players if self.get_player_status(name)]),
@@ -695,8 +933,17 @@ class SqueezeliteManager:
         
         return state_info
 
-    def get_mixer_controls(self, device):
-        """Get available mixer controls for a device"""
+    def get_mixer_controls(self, device: str) -> list:
+        """
+        Get available ALSA mixer controls for a device.
+
+        Args:
+            device: ALSA device identifier (e.g., 'hw:0,0').
+
+        Returns:
+            List of control names (e.g., ['Master', 'PCM']).
+            Returns DEFAULT_MIXER_CONTROLS for virtual devices.
+        """
         if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
             # Return virtual controls for non-hardware devices
             return DEFAULT_MIXER_CONTROLS.copy()
@@ -725,8 +972,18 @@ class SqueezeliteManager:
             logger.warning(f"Could not get mixer controls for device {device}: {e}")
             return DEFAULT_MIXER_CONTROLS.copy()
     
-    def get_device_volume(self, device, control='Master'):
-        """Get the current volume for a device"""
+    def get_device_volume(self, device: str, control: str = 'Master') -> int:
+        """
+        Get the current volume level for an audio device.
+
+        Args:
+            device: ALSA device identifier (e.g., 'hw:0,0').
+            control: Preferred mixer control name (default: 'Master').
+
+        Returns:
+            Volume level as percentage (0-100).
+            Returns DEFAULT_VOLUME_PERCENT for virtual devices or on error.
+        """
         if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
             # Return default volume for virtual devices
             logger.debug(f"Virtual device {device}, returning default volume")
@@ -763,8 +1020,21 @@ class SqueezeliteManager:
             logger.warning(f"Could not get volume for device {device}: {e}")
             return DEFAULT_VOLUME_PERCENT
     
-    def set_device_volume(self, device, volume, control='Master'):
-        """Set the volume for a device"""
+    def set_device_volume(self, device: str, volume: int, control: str = 'Master') -> tuple:
+        """
+        Set the volume level for an audio device.
+
+        Args:
+            device: ALSA device identifier (e.g., 'hw:0,0').
+            volume: Volume level as percentage (0-100).
+            control: Preferred mixer control name (default: 'Master').
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Side Effects:
+            - Changes hardware volume if device supports it
+        """
         if not 0 <= volume <= 100:
             return False, "Volume must be between 0 and 100"
 
@@ -812,8 +1082,19 @@ class SqueezeliteManager:
             logger.warning("amixer command not found")
             return False, "Audio mixer control not available"
     
-    def get_player_volume(self, name):
-        """Get the current volume for a player"""
+    def get_player_volume(self, name: str) -> int:
+        """
+        Get the current volume for a player.
+
+        Args:
+            name: Name of the player.
+
+        Returns:
+            Volume level as percentage (0-100), or None if player not found.
+
+        Side Effects:
+            - May update stored volume in config if not previously set
+        """
         if name not in self.players:
             return None
         
@@ -830,8 +1111,22 @@ class SqueezeliteManager:
         
         return actual_volume
     
-    def set_player_volume(self, name, volume):
-        """Set the volume for a player"""
+    def set_player_volume(self, name: str, volume: int) -> tuple:
+        """
+        Set the volume for a player.
+
+        Args:
+            name: Name of the player.
+            volume: Volume level as percentage (0-100).
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Side Effects:
+            - Changes hardware volume if device supports it
+            - Updates stored volume in player config
+            - Saves configuration to disk
+        """
         if name not in self.players:
             return False, "Player not found"
         
