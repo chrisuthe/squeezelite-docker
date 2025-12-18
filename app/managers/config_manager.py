@@ -133,9 +133,7 @@ class ConfigManager:
                     raw_players = yaml.safe_load(f) or {}
 
                 if self.validate_on_load and raw_players:
-                    is_valid, errors, validated_players = validate_players_file(
-                        raw_players
-                    )
+                    is_valid, errors, validated_players = validate_players_file(raw_players)
                     if not is_valid:
                         for error in errors:
                             logger.warning(f"Skipping invalid config: {error}")
@@ -147,17 +145,13 @@ class ConfigManager:
                     )
                 else:
                     self.players = raw_players
-                    logger.debug(
-                        f"Loaded {len(self.players)} players from {self.config_path}"
-                    )
+                    logger.debug(f"Loaded {len(self.players)} players from {self.config_path}")
 
             except Exception as e:
                 logger.error(f"Error loading config from {self.config_path}: {e}")
                 self.players = {}
         else:
-            logger.info(
-                f"Config file {self.config_path} does not exist, starting fresh"
-            )
+            logger.info(f"Config file {self.config_path} does not exist, starting fresh")
             self.players = {}
 
         return self.players
@@ -243,9 +237,7 @@ class ConfigManager:
         should_validate = validate if validate is not None else self.validate_on_save
 
         if should_validate:
-            is_valid, error_msg, validated_config = validate_player_config(
-                config, name
-            )
+            is_valid, error_msg, validated_config = validate_player_config(config, name)
             if not is_valid:
                 raise ConfigValidationError(
                     f"Invalid configuration for player '{name}'",

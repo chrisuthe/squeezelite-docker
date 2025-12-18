@@ -167,10 +167,7 @@ class SqueezelitePlayerConfig(BasePlayerConfig):
     def validate_mac_address(cls, v: str) -> str:
         """Validate MAC address format if provided."""
         if v and not MAC_ADDRESS_PATTERN.match(v):
-            raise ValueError(
-                f"Invalid MAC address format: {v!r}. "
-                "Expected format: XX:XX:XX:XX:XX:XX"
-            )
+            raise ValueError(f"Invalid MAC address format: {v!r}. Expected format: XX:XX:XX:XX:XX:XX")
         return v.lower() if v else v
 
     @field_validator("server_ip")
@@ -183,9 +180,7 @@ class SqueezelitePlayerConfig(BasePlayerConfig):
         # Allow hostname or IP address format
         # Basic validation - not exhaustive but catches obvious errors
         if v.startswith(("http://", "https://", "ws://", "wss://")):
-            raise ValueError(
-                f"server_ip should be an IP address or hostname, not a URL: {v!r}"
-            )
+            raise ValueError(f"server_ip should be an IP address or hostname, not a URL: {v!r}")
         return v
 
 
@@ -257,9 +252,7 @@ class SendspinPlayerConfig(BasePlayerConfig):
     def validate_server_url(cls, v: str) -> str:
         """Validate WebSocket URL format if provided."""
         if v and not WEBSOCKET_URL_PATTERN.match(v):
-            raise ValueError(
-                f"Server URL must start with ws:// or wss://, got: {v!r}"
-            )
+            raise ValueError(f"Server URL must start with ws:// or wss://, got: {v!r}")
         return v
 
     @field_validator("log_level")
@@ -269,9 +262,7 @@ class SendspinPlayerConfig(BasePlayerConfig):
         v_upper = v.upper()
         if v_upper not in VALID_LOG_LEVELS:
             valid = ", ".join(sorted(VALID_LOG_LEVELS))
-            raise ValueError(
-                f"Invalid log level: {v!r}. Must be one of: {valid}"
-            )
+            raise ValueError(f"Invalid log level: {v!r}. Must be one of: {valid}")
         return v_upper
 
     @field_validator("device")
@@ -404,8 +395,7 @@ def validate_player_config(
         else:
             return (
                 False,
-                f"Unknown provider type: {provider!r}. "
-                "Supported providers: squeezelite, sendspin",
+                f"Unknown provider type: {provider!r}. Supported providers: squeezelite, sendspin",
                 None,
             )
 
