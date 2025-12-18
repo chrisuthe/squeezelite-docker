@@ -101,7 +101,7 @@
                                     <div class="player-details mb-3">
                                         <small class="text-muted">
                                             <div><strong>Type:</strong> <span class="badge bg-{% if player.provider == 'sendspin' %}info{% else %}primary{% endif %}">{{ player.provider|default('squeezelite')|capitalize }}</span></div>
-                                            <div><strong>Device:</strong> {{ player.device }}</div>
+                                            <div><strong>Device:</strong> {{ device_names.get(player.device, player.device) }}</div>
                                             <div><strong>MAC:</strong> {{ player.mac_address }}</div>
                                             {% if player.server_ip %}
                                             <div><strong>Server:</strong> {{ player.server_ip }}</div>

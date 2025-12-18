@@ -113,7 +113,9 @@ def register_routes(app, manager):
         players = manager.players
         statuses = manager.get_all_statuses()
         devices = manager.get_audio_devices()
-        return render_template("index.html", players=players, statuses=statuses, devices=devices)
+        # Build device ID -> name lookup for display in status cards
+        device_names = {d["id"]: d["name"] for d in devices}
+        return render_template("index.html", players=players, statuses=statuses, devices=devices, device_names=device_names)
 
     @app.route("/api/swagger.yaml")
     def swagger_yaml():
