@@ -39,6 +39,18 @@ STATUS_MONITOR_INTERVAL_SECS = 2
 STATUS_MONITOR_ERROR_DELAY_SECS = 5
 
 # =============================================================================
+# REGEX PATTERNS
+# =============================================================================
+
+# Parses sendspin --list-audio-devices output to extract device index and name.
+# Matches: "[0] HDA NVidia: HDMI 0 (hw:1,3) (default)" -> ("0", "HDA NVidia: HDMI 0 (hw:1,3) (default)")
+# Format: Square brackets containing device index, followed by whitespace and device name.
+# Group 1: Device index (integer as string)
+# Group 2: Device name (everything after the index)
+# Used by: get_portaudio_devices() endpoint
+SENDSPIN_DEVICE_PATTERN = re.compile(r"^\[(\d+)\]\s*(.+)$")
+
+# =============================================================================
 # FLASK INITIALIZATION
 # =============================================================================
 
@@ -136,8 +148,7 @@ def register_routes(app, manager):
             devices = []
             for line in result.stdout.strip().split("\n"):
                 line = line.strip()
-                # Match lines like "[0] HDA NVidia: HDMI 0 (hw:1,3) (default)"
-                match = re.match(r"^\[(\d+)\]\s*(.+)$", line)
+                match = SENDSPIN_DEVICE_PATTERN.match(line)
                 if match:
                     index = match.group(1)
                     name = match.group(2)

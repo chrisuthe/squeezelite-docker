@@ -33,6 +33,34 @@ VIRTUAL_AUDIO_DEVICES = ["null", "pulse", "dmix", "default"]
 # Default volume percentage for virtual devices or when detection fails
 DEFAULT_VOLUME_PERCENT = 75
 
+# =============================================================================
+# REGEX PATTERNS FOR ALSA OUTPUT PARSING
+# =============================================================================
+# These patterns parse output from ALSA command-line tools (aplay, amixer).
+# They are designed to be resilient to minor formatting variations.
+
+# Extracts card number from ALSA hardware device identifiers.
+# Matches: "hw:0,0" -> "0", "hw:1,3" -> "1", "plughw:2,0" -> "2"
+# Format: "hw:" followed by one or more digits (card number),
+#         optionally followed by comma and device number.
+# Used by: get_mixer_controls(), get_volume(), set_volume()
+ALSA_CARD_NUMBER_PATTERN = re.compile(r"hw:([0-9]+)")
+
+# Extracts mixer control name from amixer scontrols output.
+# Matches: "Simple mixer control 'Master',0" -> "Master"
+# Format: Single-quoted string within the amixer control listing.
+# Note: Control names may contain spaces (e.g., 'Front Speaker').
+# Used by: get_mixer_controls()
+ALSA_CONTROL_NAME_PATTERN = re.compile(r"'([^']+)'")
+
+# Extracts volume percentage from amixer sget/sset output.
+# Matches: "[75%]" -> "75", "[0%]" -> "0", "[100%]" -> "100"
+# Format: Square brackets containing digits followed by percent sign.
+# Note: amixer outputs volume in multiple formats; we extract percentage.
+# Example full line: "Front Left: Playback 65 [75%] [-16.50dB] [on]"
+# Used by: get_volume()
+ALSA_VOLUME_PERCENT_PATTERN = re.compile(r"\[(\d+)%\]")
+
 
 class AudioManager:
     """
@@ -158,8 +186,8 @@ class AudioManager:
             return DEFAULT_MIXER_CONTROLS.copy()
 
         try:
-            # Extract card number from device ID
-            card_match = re.search(r"hw:([0-9]+)", device)
+            # Extract card number from device ID (e.g., "hw:0,0" -> "0")
+            card_match = ALSA_CARD_NUMBER_PATTERN.search(device)
             if not card_match:
                 return DEFAULT_MIXER_CONTROLS.copy()
 
@@ -174,8 +202,8 @@ class AudioManager:
             controls = []
             for line in result.stdout.split("\n"):
                 if "Simple mixer control" in line:
-                    # Extract control name from line like "Simple mixer control 'Master',0"
-                    match = re.search(r"'([^']+)'", line)
+                    # Extract control name (e.g., "Simple mixer control 'Master',0" -> "Master")
+                    match = ALSA_CONTROL_NAME_PATTERN.search(line)
                     if match:
                         controls.append(match.group(1))
 
@@ -205,8 +233,8 @@ class AudioManager:
             return DEFAULT_VOLUME_PERCENT
 
         try:
-            # Extract card number from device ID
-            card_match = re.search(r"hw:([0-9]+)", device)
+            # Extract card number from device ID (e.g., "hw:0,0" -> "0")
+            card_match = ALSA_CARD_NUMBER_PATTERN.search(device)
             if not card_match:
                 logger.debug(f"No card number found in device {device}, returning default volume")
                 return DEFAULT_VOLUME_PERCENT
@@ -222,8 +250,8 @@ class AudioManager:
                         check=True,
                     )
 
-                    # Parse volume from output like "[75%]"
-                    volume_match = re.search(r"\[(\d+)%\]", result.stdout)
+                    # Parse volume percentage from output (e.g., "[75%]" -> 75)
+                    volume_match = ALSA_VOLUME_PERCENT_PATTERN.search(result.stdout)
                     if volume_match:
                         volume = int(volume_match.group(1))
                         logger.debug(f"Got volume {volume}% for device {device} control {control_name}")
@@ -262,8 +290,8 @@ class AudioManager:
             return True, f"Volume set to {volume}% (virtual device)"
 
         try:
-            # Extract card number from device ID
-            card_match = re.search(r"hw:([0-9]+)", device)
+            # Extract card number from device ID (e.g., "hw:0,0" -> "0")
+            card_match = ALSA_CARD_NUMBER_PATTERN.search(device)
             if not card_match:
                 logger.debug(f"No card number found in device {device}, storing volume only")
                 return True, f"Volume set to {volume}% (no hardware control)"

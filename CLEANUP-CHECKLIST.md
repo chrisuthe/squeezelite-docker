@@ -19,13 +19,13 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | Line(s) | Issue | Priority | Description |
 |---------|-------|----------|-------------|
 | 61 | CRITICAL | Hardcoded `SECRET_KEY` - use environment variable |
-| 240-280 | MEDIUM | Complex regex parsing needs comments explaining format |
+| 240-280 | ~~MEDIUM~~ | ~~Complex regex parsing needs comments explaining format~~ Done (regex moved to audio_manager.py and common.py with full documentation) |
 | 290-320 | ~~HIGH~~ | ~~MAC address generation logic undocumented (why MD5?)~~ Done |
 | 420-440 | ~~HIGH~~ | ~~Hardcoded squeezelite params (`-a 80`, `-b 500:2000`, `-C 5`) should be configurable~~ Done (env vars) |
 | 470 | MEDIUM | Hardcoded 5-second timeout - make configurable |
-| 500-550 | MEDIUM | Magic array of mixer controls needs documentation |
+| 500-550 | ~~MEDIUM~~ | ~~Magic array of mixer controls needs documentation~~ Done (documented constants in audio_manager.py) |
 | 668, 680, 685 | LOW | Use `name` instead of `n` for route parameters |
-| 730-750 | LOW | 2-second polling interval should be documented/configurable |
+| 730-750 | ~~LOW~~ | ~~2-second polling interval should be documented/configurable~~ Done (STATUS_MONITOR_INTERVAL_SECS in common.py) |
 | All | HIGH | Add Python type hints throughout |
 | All | MEDIUM | Add module-level docstring explaining file purpose |
 
@@ -43,9 +43,9 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | Line(s) | Issue | Priority | Description |
 |---------|-------|----------|-------------|
 | 61 | CRITICAL | Same hardcoded `SECRET_KEY` issue |
-| 140 | MEDIUM | Magic number "5 minutes" for state freshness - document or configure |
-| 150 | MEDIUM | Magic number "3 seconds" delay before restore - document |
-| 211 | MEDIUM | Magic number "30 seconds" for state save interval - configure |
+| 140 | ~~MEDIUM~~ | ~~Magic number "5 minutes" for state freshness - document or configure~~ Done (STATE_FRESHNESS_TIMEOUT_SECS constant) |
+| 150 | ~~MEDIUM~~ | ~~Magic number "3 seconds" delay before restore - document~~ Done (STATE_RESTORE_DELAY_SECS constant) |
+| 211 | ~~MEDIUM~~ | ~~Magic number "30 seconds" for state save interval - configure~~ Done (STATE_SAVE_INTERVAL_SECS constant) |
 | All | ~~HIGH~~ | ~~Duplicate code from app.py - should inherit or share base class~~ Done (app/common.py) |
 | ~~New endpoints~~ | ~~MEDIUM~~ | ~~`/api/state` and `/api/state/save` not in swagger.yaml~~ Done |
 
@@ -146,7 +146,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 1. [x] Replace hardcoded `SECRET_KEY` with `os.environ.get('SECRET_KEY', 'fallback')`
 2. [x] Replace hardcoded supervisor credentials with environment variables
 3. [x] Add module-level docstrings to all Python files
-4. [x] Document the magic mixer control array in app.py
+4. [x] Document the magic mixer control array in app.py (moved to audio_manager.py with constants)
 5. [x] ~~Update psutil to latest version~~ Removed (was unused)
 6. [x] Remove unused `requests` import/dependency
 7. [x] Add constants for magic numbers (timeouts, intervals)
