@@ -529,6 +529,32 @@ class PlayerManager:
         """
         return self.providers.get_provider_info()
 
+    def get_now_playing(self, name: str) -> Any:
+        """
+        Get now-playing metadata for a player.
+
+        Currently only supported for Sendspin players with a server_url configured.
+
+        Args:
+            name: Name of the player.
+
+        Returns:
+            TrackMetadata object if available, None otherwise.
+        """
+        player = self.config.get_player(name)
+        if not player:
+            return None
+
+        provider = self.providers.get_for_player(player)
+        if provider is None:
+            return None
+
+        # Check if provider supports now playing
+        if hasattr(provider, "get_now_playing"):
+            return provider.get_now_playing(player)
+
+        return None
+
 
 # =============================================================================
 # Initialize managers and the main PlayerManager
