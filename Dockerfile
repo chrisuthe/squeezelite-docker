@@ -12,8 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core system dependencies
     ca-certificates \
     curl \
-    wget \
-    # Pre-built squeezelite with codec support (pulls in most audio deps)
+    # Squeezelite player (LMS compatible)
     squeezelite \
     # Audio system (Ubuntu 24.04 package names)
     alsa-utils \
@@ -22,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2-plugins \
     # PortAudio for sendspin (sounddevice dependency)
     libportaudio2 \
-    # Additional codec libraries for full format support (Ubuntu 24.04 versions)
+    # Codec libraries for audio format support (Ubuntu 24.04 versions)
     libflac12t64 \
     libmad0 \
     libvorbis0a \
@@ -37,16 +36,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     supervisor \
-    dos2unix \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# Verify squeezelite installation
-RUN which squeezelite && echo "Squeezelite installed successfully"
+    && apt-get clean \
+    && which squeezelite && echo "Squeezelite installed successfully"
 
 # Create application directory and required directories
 WORKDIR /app
-RUN mkdir -p /app/config /app/data /app/logs
+RUN mkdir -p /app/config /app/logs
 
 # Create basic ALSA configuration for virtual devices
 RUN mkdir -p /usr/share/alsa && \
@@ -57,18 +53,16 @@ RUN mkdir -p /usr/share/alsa && \
 # Note: --break-system-packages is required on Ubuntu 24.04 (PEP 668)
 # Don't upgrade pip - system pip 24.0 is sufficient and can't be upgraded in-place
 COPY requirements.txt /app/
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
-
-# Verify sendspin installation (no --version flag, just check it runs)
-RUN which sendspin && sendspin --help > /dev/null && echo "Sendspin installed successfully"
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt \
+    && which sendspin && sendspin --help > /dev/null && echo "Sendspin installed successfully"
 
 # Copy application files
 COPY app/ /app/
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Fix line endings and permissions
-RUN dos2unix /app/entrypoint.sh 2>/dev/null || sed -i 's/\r$//' /app/entrypoint.sh && \
+# Fix line endings (Windows CRLF -> Unix LF) and set permissions
+RUN sed -i 's/\r$//' /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh /app/health_check.py
 
 # Create user and groups
