@@ -29,9 +29,10 @@ build/
 ehthumbs.db
 Thumbs.db
 
-# IDE files
+# IDE and AI assistant files
 .vscode/
 .idea/
+.claude/
 *.sublime-project
 *.sublime-workspace
 *.swp
