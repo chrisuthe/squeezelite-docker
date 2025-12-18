@@ -636,8 +636,51 @@ def get_players():
 
 @app.route("/api/devices", methods=["GET"])
 def get_devices():
-    """API endpoint to get audio devices"""
+    """API endpoint to get audio devices (ALSA)"""
     return jsonify({"devices": manager.get_audio_devices()})
+
+
+@app.route("/api/devices/portaudio", methods=["GET"])
+def get_portaudio_devices():
+    """API endpoint to get PortAudio devices (for Sendspin)"""
+    try:
+        result = subprocess.run(
+            ["sendspin", "--list-audio-devices"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        # Parse the output - sendspin lists devices with index and name
+        devices = []
+        for line in result.stdout.strip().split("\n"):
+            line = line.strip()
+            if line and not line.startswith("Available"):
+                # Lines are typically like "0: Device Name" or just device info
+                devices.append({"raw": line})
+        return jsonify({
+            "success": True,
+            "devices": devices,
+            "raw_output": result.stdout,
+            "note": "Use device index (0, 1, 2) or name prefix with --audio-device for sendspin",
+        })
+    except FileNotFoundError:
+        return jsonify({
+            "success": False,
+            "message": "sendspin binary not found",
+            "devices": [],
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            "success": False,
+            "message": "Timeout listing audio devices",
+            "devices": [],
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e),
+            "devices": [],
+        })
 
 
 @app.route("/api/providers", methods=["GET"])

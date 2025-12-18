@@ -62,7 +62,7 @@ class SendspinProvider(PlayerProvider):
         Args:
             player: Player configuration containing:
                 - name: Player display name
-                - device: Audio output device
+                - device: Audio output device (PortAudio index or name, NOT ALSA hw:X,Y)
                 - client_id: Unique client identifier
                 - server_url: Optional WebSocket server URL
                 - delay_ms: Optional latency compensation
@@ -81,10 +81,22 @@ class SendspinProvider(PlayerProvider):
             player.get("client_id", self._generate_client_id(player["name"])),
         ]
 
-        # Add audio device if specified and not default
+        # Add audio device if specified and compatible with PortAudio
+        # Note: Sendspin uses PortAudio, not ALSA - device can be:
+        # - A number (PortAudio device index, e.g., "0", "1", "2")
+        # - A device name prefix (e.g., "USB Audio", "MacBook")
+        # - NOT ALSA format like "hw:1,0" - those are skipped
         device = player.get("device", "default")
-        if device and device != "default":
-            cmd.extend(["--audio-device", device])
+        if device and device != "default" and device != "null":
+            # Skip ALSA-style device names (hw:X,Y format) - not compatible with PortAudio
+            if not device.startswith("hw:") and not device.startswith("plughw:"):
+                cmd.extend(["--audio-device", device])
+            else:
+                logger.warning(
+                    f"Sendspin player '{player['name']}' configured with ALSA device '{device}' "
+                    "which is not compatible with PortAudio. Using system default audio device. "
+                    "Use 'sendspin --list-audio-devices' to see available PortAudio devices."
+                )
 
         # Add server URL if specified (otherwise uses mDNS discovery)
         if player.get("server_url"):
