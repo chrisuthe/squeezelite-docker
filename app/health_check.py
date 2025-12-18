@@ -1,4 +1,24 @@
 #!/usr/bin/env python3
+"""
+Container Health Check Script
+
+Validates that the Squeezelite Multi-Room container is properly configured
+and ready to run. Executed during container startup by entrypoint.sh.
+
+Tests Performed:
+    1. Python Imports: Verifies Flask, SocketIO, PyYAML, psutil are available
+    2. Directory Access: Checks /app/config, /app/logs, /app/data are writable
+    3. Flask App: Tests basic Flask initialization and routing
+    4. Audio Commands: Verifies squeezelite binary exists and responds
+    5. Port Availability: Checks if port 8080 is available
+
+Exit Codes:
+    0: All tests passed - container is healthy
+    1: One or more tests failed - check output for details
+
+Usage:
+    python3 health_check.py
+"""
 
 import sys
 import os

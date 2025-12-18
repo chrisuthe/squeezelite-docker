@@ -1,4 +1,27 @@
 #!/usr/bin/env python3
+"""
+Squeezelite Multi-Room Controller - Main Application
+
+A Flask-based web application for managing multiple Squeezelite audio players.
+Provides a REST API and web interface for creating, configuring, and controlling
+audio players across different rooms/zones.
+
+Key Components:
+    - SqueezeliteManager: Core class handling player lifecycle, audio devices,
+      and volume control via ALSA
+    - REST API: Endpoints for player CRUD operations, status, and volume control
+    - WebSocket: Real-time status updates to connected browsers
+    - Swagger UI: Interactive API documentation at /api/docs
+
+Configuration:
+    - Players stored in /app/config/players.yaml
+    - Logs written to /app/logs/
+    - Environment variables: SECRET_KEY, SUPERVISOR_USER, SUPERVISOR_PASSWORD
+
+Usage:
+    Run directly: python3 app.py
+    Via supervisor: supervisord -c /etc/supervisor/conf.d/supervisord.conf
+"""
 
 import os
 import sys

@@ -1,4 +1,30 @@
 #!/usr/bin/env python3
+"""
+Squeezelite Multi-Room Controller - Enhanced Version with State Persistence
+
+Extended version of app.py that adds automatic state persistence and restoration.
+When the container restarts, previously running players are automatically restarted.
+
+Additional Features (vs app.py):
+    - State persistence: Running players saved to /app/config/player_states.yaml
+    - Auto-restore: Players automatically restarted on container startup
+    - Graceful shutdown: Signal handlers for clean process termination
+    - Periodic state saving: Background thread saves state every 30 seconds
+
+State File Format (player_states.yaml):
+    timestamp: ISO format datetime of last save
+    running_players: List of player names that were running
+    total_players: Total number of configured players
+
+Configuration:
+    - State freshness timeout: 5 minutes (states older than this are not restored)
+    - State save interval: 30 seconds
+    - Restore delay: 3 seconds after startup
+
+Note:
+    Use this version instead of app.py if you need players to survive container
+    restarts. Configure supervisord to run this file instead of app.py.
+"""
 
 import os
 import sys
