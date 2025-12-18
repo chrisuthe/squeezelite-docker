@@ -76,7 +76,7 @@
                     {% if players %}
                         {% for name, player in players.items() %}
                         <div class="col-md-6 col-lg-4 mb-3">
-                            <div class="card player-card h-100" data-player="{{ name }}">
+                            <div class="card player-card h-100" data-player="{{ name|e }}">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between align-items-start mb-2">
                                         <h5 class="card-title mb-0">{{ player.name }}</h5>
@@ -85,15 +85,15 @@
                                                 <i class="fas fa-ellipsis-v"></i>
                                             </button>
                                             <ul class="dropdown-menu">
-                                                <li><a class="dropdown-item" href="#" onclick="editPlayer('{{ name }}')"><i class="fas fa-edit me-2"></i>Edit</a></li>
-                                                <li><a class="dropdown-item text-danger" href="#" onclick="deletePlayer('{{ name }}')"><i class="fas fa-trash me-2"></i>Delete</a></li>
+                                                <li><a class="dropdown-item" href="#" onclick="editPlayer({{ name|tojson }}); return false;"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                                                <li><a class="dropdown-item text-danger" href="#" onclick="deletePlayer({{ name|tojson }}); return false;"><i class="fas fa-trash me-2"></i>Delete</a></li>
                                             </ul>
                                         </div>
                                     </div>
                                     
                                     <div class="status-container mb-3">
-                                        <span class="status-indicator status-{% if statuses.get(name) %}running{% else %}stopped{% endif %}" id="status-{{ name }}"></span>
-                                        <span class="status-text" id="status-text-{{ name }}">
+                                        <span class="status-indicator status-{% if statuses.get(name) %}running{% else %}stopped{% endif %}" id="status-{{ name|e }}"></span>
+                                        <span class="status-text" id="status-text-{{ name|e }}">
                                             {% if statuses.get(name) %}Running{% else %}Stopped{% endif %}
                                         </span>
                                     </div>
@@ -109,26 +109,26 @@
                                     </div>
                                     
                                     <div class="volume-control mb-3">
-                                        <label class="form-label small text-muted" for="volume-{{ name }}">Volume</label>
+                                        <label class="form-label small text-muted" for="volume-{{ name|e }}">Volume</label>
                                         <div class="d-flex align-items-center">
                                             <i class="fas fa-volume-down text-muted me-2"></i>
-                                            <input type="range" 
-                                                   class="form-range flex-grow-1 mx-2" 
-                                                   min="0" 
-                                                   max="100" 
-                                                   value="{{ player.volume or 75 }}" 
-                                                   id="volume-{{ name }}" 
-                                                   data-player="{{ name }}">
+                                            <input type="range"
+                                                   class="form-range flex-grow-1 mx-2"
+                                                   min="0"
+                                                   max="100"
+                                                   value="{{ player.volume or 75 }}"
+                                                   id="volume-{{ name|e }}"
+                                                   data-player="{{ name|e }}">
                                             <i class="fas fa-volume-up text-muted ms-2"></i>
-                                            <span class="volume-display ms-2 small text-muted" id="volume-display-{{ name }}">{{ player.volume or 75 }}%</span>
+                                            <span class="volume-display ms-2 small text-muted" id="volume-display-{{ name|e }}">{{ player.volume or 75 }}%</span>
                                         </div>
                                     </div>
                                     
                                     <div class="d-grid">
-                                        <button class="btn btn-success btn-action start-btn {% if statuses.get(name) %}d-none{% endif %}" data-player="{{ name }}" onclick="startPlayer('{{ name }}')">
+                                        <button class="btn btn-success btn-action start-btn {% if statuses.get(name) %}d-none{% endif %}" data-player="{{ name|e }}" onclick="startPlayer({{ name|tojson }}); return false;">
                                             <i class="fas fa-play me-1"></i>Start
                                         </button>
-                                        <button class="btn btn-danger btn-action stop-btn {% if not statuses.get(name) %}d-none{% endif %}" data-player="{{ name }}" onclick="stopPlayer('{{ name }}')">
+                                        <button class="btn btn-danger btn-action stop-btn {% if not statuses.get(name) %}d-none{% endif %}" data-player="{{ name|e }}" onclick="stopPlayer({{ name|tojson }}); return false;">
                                             <i class="fas fa-stop me-1"></i>Stop
                                         </button>
                                     </div>
@@ -249,6 +249,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
+        // XSS protection: escape HTML entities in user-provided content
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         const socket = io();
         
         // Handle real-time status updates
@@ -284,14 +291,21 @@
         function showAlert(message, type = 'success') {
             const alertContainer = document.getElementById('alert-container');
             const alertId = 'alert-' + Date.now();
-            const alert = document.createElement('div');
-            alert.innerHTML = `
-                <div class="alert alert-${type} alert-dismissible fade show" role="alert" id="${alertId}">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            `;
-            alertContainer.appendChild(alert);
+            const alertWrapper = document.createElement('div');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${escapeHtml(type)} alert-dismissible fade show`;
+            alertDiv.setAttribute('role', 'alert');
+            alertDiv.id = alertId;
+            alertDiv.textContent = message; // Safe: textContent doesn't parse HTML
+
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'btn-close';
+            closeBtn.setAttribute('data-bs-dismiss', 'alert');
+            alertDiv.appendChild(closeBtn);
+
+            alertWrapper.appendChild(alertDiv);
+            alertContainer.appendChild(alertWrapper);
             
             // Auto-dismiss after 5 seconds
             setTimeout(() => {
