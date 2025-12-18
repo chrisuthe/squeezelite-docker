@@ -5,6 +5,7 @@ Defines the interface that all player providers must implement,
 enabling a pluggable architecture for different audio backends.
 """
 
+import shutil
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -156,6 +157,18 @@ class PlayerProvider(ABC):
             True if fallback is supported, False otherwise.
         """
         return False
+
+    def is_available(self) -> bool:
+        """
+        Check if this provider's binary is available on the system.
+
+        Uses shutil.which() to check if the binary can be found in PATH.
+        Providers can override this for custom availability checks.
+
+        Returns:
+            True if the provider's binary is available, False otherwise.
+        """
+        return shutil.which(self.binary_name) is not None
 
     def get_player_identifier(self, player: PlayerConfig) -> str:
         """

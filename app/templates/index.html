@@ -172,10 +172,9 @@
                         <div class="mb-3">
                             <label for="editPlayerProvider" class="form-label">Player Type *</label>
                             <select class="form-select" id="editPlayerProvider" name="provider" required onchange="toggleProviderFields('edit')">
-                                <option value="squeezelite">Squeezelite (LMS/SlimProto)</option>
-                                <option value="sendspin">Sendspin (Music Assistant)</option>
+                                <option value="">Loading providers...</option>
                             </select>
-                            <div class="form-text">Squeezelite for LMS servers, Sendspin for Music Assistant native protocol</div>
+                            <div class="form-text">Select the audio backend for this player</div>
                         </div>
 
                         <div class="mb-3">
@@ -228,10 +227,9 @@
                         <div class="mb-3">
                             <label for="playerProvider" class="form-label">Player Type *</label>
                             <select class="form-select" id="playerProvider" name="provider" required onchange="toggleProviderFields('add')">
-                                <option value="squeezelite">Squeezelite (LMS/SlimProto)</option>
-                                <option value="sendspin">Sendspin (Music Assistant)</option>
+                                <option value="">Loading providers...</option>
                             </select>
-                            <div class="form-text">Squeezelite for LMS servers, Sendspin for Music Assistant native protocol</div>
+                            <div class="form-text">Select the audio backend for this player</div>
                         </div>
 
                         <div class="mb-3">
@@ -273,6 +271,61 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Cache for available providers
+        let availableProviders = null;
+
+        // Load available providers from API
+        async function loadProviders() {
+            try {
+                const response = await fetch('/api/providers');
+                const result = await response.json();
+                availableProviders = result.providers || [];
+                return availableProviders;
+            } catch (error) {
+                console.error('Error loading providers:', error);
+                return [];
+            }
+        }
+
+        // Populate provider dropdown with available providers
+        async function populateProviderDropdown(selectElement, selectedValue = '') {
+            if (!availableProviders) {
+                await loadProviders();
+            }
+
+            selectElement.innerHTML = '';
+
+            if (availableProviders.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No providers available';
+                option.disabled = true;
+                selectElement.appendChild(option);
+                return;
+            }
+
+            availableProviders.forEach((provider, index) => {
+                const option = document.createElement('option');
+                option.value = provider.type;
+                // Add description based on provider type
+                if (provider.type === 'squeezelite') {
+                    option.textContent = 'Squeezelite (LMS/SlimProto)';
+                } else if (provider.type === 'sendspin') {
+                    option.textContent = 'Sendspin (Music Assistant)';
+                } else {
+                    option.textContent = provider.display_name;
+                }
+                selectElement.appendChild(option);
+            });
+
+            // Set selected value or default to first option
+            if (selectedValue && availableProviders.some(p => p.type === selectedValue)) {
+                selectElement.value = selectedValue;
+            } else if (availableProviders.length > 0) {
+                selectElement.value = availableProviders[0].type;
+            }
         }
 
         // Toggle provider-specific fields based on selected provider
@@ -520,12 +573,14 @@
                 // Populate the edit form
                 document.getElementById('editOriginalName').value = playerName;
                 document.getElementById('editPlayerName').value = player.name;
-                document.getElementById('editPlayerProvider').value = player.provider || 'squeezelite';
                 document.getElementById('editServerIP').value = player.server_ip || '';
                 document.getElementById('editMacAddress').value = player.mac_address;
 
-                // Toggle provider-specific fields (this also loads devices)
+                // Populate provider dropdown and set current value
                 const providerSelect = document.getElementById('editPlayerProvider');
+                await populateProviderDropdown(providerSelect, player.provider || 'squeezelite');
+
+                // Toggle provider-specific fields
                 const serverIPGroup = document.getElementById('editServerIPGroup');
                 const isSqueezelite = providerSelect.value === 'squeezelite';
                 serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
@@ -676,9 +731,9 @@
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData.entries());
 
-            // Ensure provider is included
-            if (!data.provider) {
-                data.provider = 'squeezelite';
+            // Ensure provider is included (use first available if not set)
+            if (!data.provider && availableProviders && availableProviders.length > 0) {
+                data.provider = availableProviders[0].type;
             }
 
             try {
@@ -723,13 +778,19 @@
             const deviceSelect = document.getElementById('audioDevice');
             const serverIPGroup = document.getElementById('addServerIPGroup');
 
-            // Default to squeezelite provider
-            providerSelect.value = 'squeezelite';
-            serverIPGroup.style.display = 'block';
+            // Populate provider dropdown (will default to first available)
+            await populateProviderDropdown(providerSelect);
 
-            // Load ALSA devices by default (for squeezelite)
-            await loadDevicesForProvider('squeezelite', deviceSelect);
+            // Show/hide server IP based on selected provider
+            const isSqueezelite = providerSelect.value === 'squeezelite';
+            serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
+
+            // Load devices for selected provider
+            await loadDevicesForProvider(providerSelect.value, deviceSelect);
         });
+
+        // Load providers on page load to pre-cache them
+        loadProviders();
     </script>
 </body>
 </html>

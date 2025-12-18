@@ -118,29 +118,67 @@ class ProviderRegistry:
         """
         return provider_type in self._providers
 
-    def list_providers(self) -> list[str]:
+    def list_providers(self, available_only: bool = False) -> list[str]:
         """
         Get list of registered provider types.
+
+        Args:
+            available_only: If True, only return providers whose binary is available.
 
         Returns:
             List of provider type strings.
         """
+        if available_only:
+            return [
+                ptype for ptype, provider in self._providers.items()
+                if provider.is_available()
+            ]
         return list(self._providers.keys())
 
-    def get_provider_info(self) -> list[dict[str, str]]:
+    def get_default_available_provider(self) -> str | None:
         """
-        Get information about all registered providers.
+        Get the default provider type, ensuring it's available.
+
+        If the configured default provider isn't available, returns
+        the first available provider instead.
 
         Returns:
-            List of dictionaries with provider info (type, display_name).
+            Provider type string, or None if no providers are available.
+        """
+        # Check if default is available
+        default = self._providers.get(self.default_provider)
+        if default and default.is_available():
+            return self.default_provider
+
+        # Fall back to first available provider
+        for provider_type, provider in self._providers.items():
+            if provider.is_available():
+                return provider_type
+
+        return None
+
+    def get_provider_info(self, available_only: bool = True) -> list[dict[str, str]]:
+        """
+        Get information about registered providers.
+
+        Args:
+            available_only: If True (default), only return providers whose
+                binary is available on the system. Set to False to return all.
+
+        Returns:
+            List of dictionaries with provider info (type, display_name, available).
         """
         info = []
         for provider_type, provider in self._providers.items():
+            is_available = provider.is_available()
+            if available_only and not is_available:
+                continue
             info.append(
                 {
                     "type": provider_type,
                     "display_name": provider.display_name,
                     "binary": provider.binary_name,
+                    "available": is_available,
                 }
             )
         return info
