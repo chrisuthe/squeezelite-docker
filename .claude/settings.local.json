@@ -8,7 +8,8 @@
       "Bash(ruff format:*)",
       "Bash(python -m ruff:*)",
       "Bash(curl:*)",
-      "Bash(python -m json.tool:*)"
+      "Bash(python -m json.tool:*)",
+      "Bash(docker run:*)"
     ]
   }
 }

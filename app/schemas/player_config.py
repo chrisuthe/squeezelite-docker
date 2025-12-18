@@ -13,7 +13,6 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
-    model_validator,
 )
 
 # =============================================================================
@@ -284,34 +283,6 @@ class SendspinPlayerConfig(BasePlayerConfig):
 
 # Union type for any valid player configuration
 PlayerConfigSchema = SqueezelitePlayerConfig | SendspinPlayerConfig
-
-
-# =============================================================================
-# PLAYERS FILE SCHEMA
-# =============================================================================
-
-
-class PlayersFileSchema(BaseModel):
-    """
-    Schema for the entire players.yaml file.
-
-    The file is a dictionary mapping player names to their configurations.
-    This model validates the overall structure.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    __root__: dict[str, PlayerConfigSchema] = Field(default_factory=dict)
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_players_dict(cls, data: Any) -> dict[str, Any]:
-        """Validate input is a dictionary."""
-        if data is None:
-            return {"__root__": {}}
-        if not isinstance(data, dict):
-            raise ValueError(f"Expected dictionary, got {type(data).__name__}")
-        return {"__root__": data}
 
 
 # =============================================================================
