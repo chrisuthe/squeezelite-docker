@@ -52,9 +52,8 @@ jobs:
             latest=${{ matrix.flavor_latest }}
             suffix=${{ matrix.suffix }}
           tags: |
-            # Set "latest" or "slim" tag for main branch
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && matrix.suffix == '' }}
-            type=raw,value=slim,enable=${{ github.ref == 'refs/heads/main' && matrix.suffix == '-slim' }}
+            # Set "latest" tag for main branch (becomes "latest" for full, "latest-slim" for slim via suffix)
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             # Set version tags from git tags (v1.2.3 -> 1.2.3, 1.2.3-slim)
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
