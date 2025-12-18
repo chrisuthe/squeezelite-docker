@@ -129,10 +129,7 @@ class ProviderRegistry:
             List of provider type strings.
         """
         if available_only:
-            return [
-                ptype for ptype, provider in self._providers.items()
-                if provider.is_available()
-            ]
+            return [ptype for ptype, provider in self._providers.items() if provider.is_available()]
         return list(self._providers.keys())
 
     def get_default_available_provider(self) -> str | None:
