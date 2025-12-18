@@ -100,6 +100,7 @@
                                     
                                     <div class="player-details mb-3">
                                         <small class="text-muted">
+                                            <div><strong>Type:</strong> <span class="badge bg-{% if player.provider == 'sendspin' %}info{% else %}primary{% endif %}">{{ player.provider|default('squeezelite')|capitalize }}</span></div>
                                             <div><strong>Device:</strong> {{ player.device }}</div>
                                             <div><strong>MAC:</strong> {{ player.mac_address }}</div>
                                             {% if player.server_ip %}
@@ -161,13 +162,22 @@
                 <form id="editPlayerForm">
                     <div class="modal-body">
                         <input type="hidden" id="editOriginalName" name="original_name">
-                        
+
                         <div class="mb-3">
                             <label for="editPlayerName" class="form-label">Player Name *</label>
                             <input type="text" class="form-control" id="editPlayerName" name="name" required>
                             <div class="form-text">Choose a unique name for this player (e.g., "Living Room", "Kitchen")</div>
                         </div>
-                        
+
+                        <div class="mb-3">
+                            <label for="editPlayerProvider" class="form-label">Player Type *</label>
+                            <select class="form-select" id="editPlayerProvider" name="provider" required onchange="toggleProviderFields('edit')">
+                                <option value="squeezelite">Squeezelite (LMS/SlimProto)</option>
+                                <option value="sendspin">Sendspin (Music Assistant)</option>
+                            </select>
+                            <div class="form-text">Squeezelite for LMS servers, Sendspin for Music Assistant native protocol</div>
+                        </div>
+
                         <div class="mb-3">
                             <label for="editAudioDevice" class="form-label">Audio Device *</label>
                             <select class="form-select" id="editAudioDevice" name="device" required>
@@ -177,13 +187,13 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        
-                        <div class="mb-3">
+
+                        <div class="mb-3 squeezelite-field" id="editServerIPGroup">
                             <label for="editServerIP" class="form-label">Music Assistant Server IP (optional)</label>
                             <input type="text" class="form-control" id="editServerIP" name="server_ip" placeholder="192.168.1.100">
                             <div class="form-text">Leave empty for auto-discovery</div>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="editMacAddress" class="form-label">MAC Address</label>
                             <input type="text" class="form-control" id="editMacAddress" name="mac_address" placeholder="aa:bb:cc:dd:ee:ff" readonly>
@@ -214,7 +224,16 @@
                             <input type="text" class="form-control" id="playerName" name="name" required>
                             <div class="form-text">Choose a unique name for this player (e.g., "Living Room", "Kitchen")</div>
                         </div>
-                        
+
+                        <div class="mb-3">
+                            <label for="playerProvider" class="form-label">Player Type *</label>
+                            <select class="form-select" id="playerProvider" name="provider" required onchange="toggleProviderFields('add')">
+                                <option value="squeezelite">Squeezelite (LMS/SlimProto)</option>
+                                <option value="sendspin">Sendspin (Music Assistant)</option>
+                            </select>
+                            <div class="form-text">Squeezelite for LMS servers, Sendspin for Music Assistant native protocol</div>
+                        </div>
+
                         <div class="mb-3">
                             <label for="audioDevice" class="form-label">Audio Device *</label>
                             <select class="form-select" id="audioDevice" name="device" required>
@@ -224,13 +243,13 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        
-                        <div class="mb-3">
+
+                        <div class="mb-3 squeezelite-field" id="addServerIPGroup">
                             <label for="serverIP" class="form-label">Music Assistant Server IP (optional)</label>
                             <input type="text" class="form-control" id="serverIP" name="server_ip" placeholder="192.168.1.100">
                             <div class="form-text">Leave empty for auto-discovery</div>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="macAddress" class="form-label">MAC Address (optional)</label>
                             <input type="text" class="form-control" id="macAddress" name="mac_address" placeholder="aa:bb:cc:dd:ee:ff">
@@ -254,6 +273,17 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Toggle provider-specific fields based on selected provider
+        function toggleProviderFields(formPrefix) {
+            const providerSelect = document.getElementById(formPrefix === 'edit' ? 'editPlayerProvider' : 'playerProvider');
+            const serverIPGroup = document.getElementById(formPrefix === 'edit' ? 'editServerIPGroup' : 'addServerIPGroup');
+
+            if (providerSelect && serverIPGroup) {
+                const isSqueezelite = providerSelect.value === 'squeezelite';
+                serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
+            }
         }
 
         const socket = io();
@@ -415,13 +445,17 @@
                         showAlert('Player not found', 'danger');
                         return;
                     }
-                    
+
                     // Populate the edit form
                     document.getElementById('editOriginalName').value = playerName;
                     document.getElementById('editPlayerName').value = player.name;
+                    document.getElementById('editPlayerProvider').value = player.provider || 'squeezelite';
                     document.getElementById('editServerIP').value = player.server_ip || '';
                     document.getElementById('editMacAddress').value = player.mac_address;
-                    
+
+                    // Toggle provider-specific fields
+                    toggleProviderFields('edit');
+
                     // Load devices and set current device
                     return fetch('/api/devices');
                 })
@@ -560,6 +594,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         name: data.name,
+                        provider: data.provider,
                         device: data.device,
                         server_ip: data.server_ip,
                         mac_address: data.mac_address
@@ -585,10 +620,15 @@
         // Handle add player form submission
         document.getElementById('addPlayerForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData.entries());
-            
+
+            // Ensure provider is included
+            if (!data.provider) {
+                data.provider = 'squeezelite';
+            }
+
             try {
                 const response = await fetch('/api/players', {
                     method: 'POST',

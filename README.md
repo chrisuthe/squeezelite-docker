@@ -1,19 +1,21 @@
-# Squeezelite Multi-Room Docker Controller
+# Multi-Room Audio Docker Controller
 
-![Squeezelite Multi-Room Controller](screenshot.png)
+![Multi-Room Controller](screenshot.png)
 
-A containerized multi-room audio solution that runs multiple [squeezelite](https://github.com/ralph-irving/squeezelite) players with an intuitive web management interface. Perfect for creating synchronized audio zones throughout your home using USB DACs, built-in audio, or network audio devices.
+A containerized multi-room audio solution supporting both [Squeezelite](https://github.com/ralph-irving/squeezelite) (LMS/SlimProto) and [Sendspin](https://pypi.org/project/sendspin/) (Music Assistant native) players with an intuitive web management interface. Perfect for creating synchronized audio zones throughout your home using USB DACs, built-in audio, or network audio devices.
 
 ![Multi-Room Audio Controller](https://img.shields.io/badge/Multi--Room-Audio%20Controller-blue?style=for-the-badge&logo=music)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker)
 ![Music Assistant](https://img.shields.io/badge/Music%20Assistant-Compatible-green?style=for-the-badge)
 ![Real-time](https://img.shields.io/badge/Real--time-WebSocket%20Updates-orange?style=for-the-badge)
+![Sendspin](https://img.shields.io/badge/Sendspin-Native%20Support-purple?style=for-the-badge)
 
 ## 🎯 Project Goals
 
 Transform any system with Docker into a powerful multi-room audio controller by:
 - **Centralizing Control**: Manage all your audio zones from one elegant web interface
-- **Simplifying Deployment**: One container handles multiple squeezelite players
+- **Simplifying Deployment**: One container handles multiple audio players
+- **Supporting Multiple Backends**: Choose Squeezelite (LMS) or Sendspin (Music Assistant native)
 - **Enabling Flexibility**: Support various audio outputs from USB DACs to network streams
 - **Ensuring Reliability**: Persistent configuration with automatic player recovery
 - **Providing Integration**: Seamless compatibility with Music Assistant and LMS servers
@@ -21,7 +23,9 @@ Transform any system with Docker into a powerful multi-room audio controller by:
 ## ✨ Key Features
 
 ### 🏠 **Multi-Room Audio Management**
-- Create unlimited squeezelite players in a single container
+- Create unlimited audio players in a single container
+- **Squeezelite**: Traditional LMS/SlimProto protocol for Logitech Media Server
+- **Sendspin**: Native Music Assistant protocol with synchronized playback
 - Individual volume control for each audio zone
 - Real-time status monitoring with WebSocket updates
 - Automatic player discovery by Music Assistant
@@ -50,19 +54,40 @@ Transform any system with Docker into a powerful multi-room audio controller by:
 
 **Ready-to-deploy images available at**: https://hub.docker.com/r/chrisuthe/squeezelitemultiroom
 
+### Image Variants
+
+| Tag | Description | Size | Use Case |
+|-----|-------------|------|----------|
+| `latest` | Full image with Squeezelite + Sendspin | ~200MB | LMS users, mixed environments |
+| `slim` | Sendspin only (no Squeezelite) | ~150MB | Music Assistant native users |
+| `X.Y.Z` | Version-tagged full image | ~200MB | Production deployments |
+| `X.Y.Z-slim` | Version-tagged slim image | ~150MB | Production MA deployments |
+
 ### Quick Deployment
+
+**Full Image (Squeezelite + Sendspin)**
 ```bash
-# Basic deployment
 docker run -d \
-  --name squeezelite-multiroom \
+  --name multiroom-audio \
   -p 8080:8080 \
-  -v squeezelite_config:/app/config \
-  -v squeezelite_logs:/app/logs \
+  -v audio_config:/app/config \
+  -v audio_logs:/app/logs \
   --device /dev/snd:/dev/snd \
   chrisuthe/squeezelitemultiroom:latest
-
-# Access web interface at http://localhost:8080
 ```
+
+**Slim Image (Sendspin Only - Music Assistant)**
+```bash
+docker run -d \
+  --name sendspin-audio \
+  -p 8080:8080 \
+  -v audio_config:/app/config \
+  -v audio_logs:/app/logs \
+  --device /dev/snd:/dev/snd \
+  chrisuthe/squeezelitemultiroom:slim
+```
+
+Access web interface at `http://localhost:8080`
 
 ### Container Platform Deployment
 
@@ -133,9 +158,12 @@ Navigate to `http://your-host-ip:8080`
 ### Step 3: Create Your First Player
 1. Click **"Add Player"**
 2. **Name**: Enter a descriptive name (e.g., "Living Room", "Kitchen")
-3. **Audio Device**: Select from auto-detected devices
-4. **Music Assistant Server**: Leave empty for auto-discovery, or enter IP manually
-5. Click **"Create Player"**
+3. **Player Type**: Choose your backend:
+   - **Squeezelite**: For LMS/Logitech Media Server
+   - **Sendspin**: For Music Assistant native protocol
+4. **Audio Device**: Select from auto-detected devices
+5. **Server IP** (Squeezelite only): Leave empty for auto-discovery, or enter IP manually
+6. Click **"Create Player"**
 
 ### Step 4: Start Playing
 1. Click **"Start"** on your new player
@@ -217,10 +245,15 @@ Full programmatic control available:
 # List all players
 curl http://localhost:8080/api/players
 
-# Create new player
+# Create Squeezelite player
 curl -X POST http://localhost:8080/api/players \
   -H "Content-Type: application/json" \
-  -d '{"name": "Patio", "device": "hw:3,0", "server_ip": "192.168.1.100"}'
+  -d '{"name": "Patio", "provider": "squeezelite", "device": "hw:3,0", "server_ip": "192.168.1.100"}'
+
+# Create Sendspin player (Music Assistant native)
+curl -X POST http://localhost:8080/api/players \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Kitchen", "provider": "sendspin", "device": "hw:2,0"}'
 
 # Control volume
 curl -X POST http://localhost:8080/api/players/Patio/volume \
@@ -358,10 +391,21 @@ docker-compose -f docker-compose.dev.yml up
 - Container-native deployments on NAS systems
 
 **Works with**:
-- Music Assistant (recommended)
-- Logitech Media Server (LMS)
-- Any SlimProto-compatible server
+- Music Assistant (recommended) - via Squeezelite or Sendspin
+- Logitech Media Server (LMS) - via Squeezelite
+- Any SlimProto-compatible server - via Squeezelite
 - Local audio files and streaming services
+
+## 🔄 Player Type Comparison
+
+| Feature | Squeezelite | Sendspin |
+|---------|-------------|----------|
+| Protocol | SlimProto | Music Assistant Native |
+| Server | LMS / Music Assistant | Music Assistant only |
+| Sync | Yes (via server) | Yes (native) |
+| Latency | Low | Very low |
+| Setup | Server IP optional | Auto-discovery |
+| Image | `latest` or `slim` | `latest` or `slim` |
 
 ---
 

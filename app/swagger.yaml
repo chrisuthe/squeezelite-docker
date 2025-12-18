@@ -2,14 +2,20 @@ openapi: 3.0.3
 info:
   title: Squeezelite Multi-Room Controller API
   description: |
-    A comprehensive API for managing multiple squeezelite audio players in a multi-room setup.
-    
+    A comprehensive API for managing multiple audio players in a multi-room setup.
+    Supports both Squeezelite (LMS/SlimProto) and Sendspin (Music Assistant native) players.
+
     ## Features
-    - 🎵 **Multi-room audio control** - Manage multiple squeezelite players
+    - 🎵 **Multi-room audio control** - Manage multiple audio players
+    - 🔄 **Multiple backends** - Squeezelite (LMS) or Sendspin (Music Assistant)
     - 🔊 **Volume control** - Hardware ALSA mixer integration
     - 🎛️ **Device management** - Auto-detect and configure audio devices
     - 📱 **Real-time updates** - WebSocket support for live status updates
     - 🔧 **Debug tools** - Audio device detection and troubleshooting
+
+    ## Player Types
+    - **Squeezelite**: Traditional LMS/SlimProto player for Logitech Media Server
+    - **Sendspin**: Native Music Assistant player using synchronized audio protocol
     
     ## Audio Devices
     The API automatically detects available audio devices:
@@ -432,6 +438,12 @@ components:
           type: string
           description: Display name of the player
           example: Headphones
+        provider:
+          type: string
+          enum: [squeezelite, sendspin]
+          description: Player backend type (squeezelite for LMS/SlimProto, sendspin for Music Assistant native)
+          default: squeezelite
+          example: squeezelite
         device:
           type: string
           description: Audio device identifier
@@ -443,7 +455,7 @@ components:
           example: dc:be:dd:e0:ce:40
         server_ip:
           type: string
-          description: Music Assistant server IP (optional)
+          description: Music Assistant server IP (optional, only used by squeezelite provider)
           example: 10.0.2.8
         enabled:
           type: boolean
@@ -491,13 +503,19 @@ components:
           type: string
           description: Display name for the new player
           example: Living Room
+        provider:
+          type: string
+          enum: [squeezelite, sendspin]
+          description: Player backend type (squeezelite for LMS/SlimProto, sendspin for Music Assistant native)
+          default: squeezelite
+          example: squeezelite
         device:
           type: string
           description: Audio device identifier
           example: hw:1,0
         server_ip:
           type: string
-          description: Music Assistant server IP (optional)
+          description: Music Assistant server IP (optional, only used by squeezelite provider)
           example: 192.168.1.100
         mac_address:
           type: string
@@ -515,13 +533,19 @@ components:
           type: string
           description: Display name for the player
           example: Living Room Updated
+        provider:
+          type: string
+          enum: [squeezelite, sendspin]
+          description: Player backend type (squeezelite for LMS/SlimProto, sendspin for Music Assistant native)
+          default: squeezelite
+          example: squeezelite
         device:
           type: string
           description: Audio device identifier
           example: hw:1,0
         server_ip:
           type: string
-          description: Music Assistant server IP (optional)
+          description: Music Assistant server IP (optional, only used by squeezelite provider)
           example: 192.168.1.100
         mac_address:
           type: string
