@@ -39,9 +39,7 @@ import traceback
 from datetime import datetime
 
 import yaml
-from flask import Flask, jsonify, render_template, request, send_from_directory
-from flask_socketio import SocketIO, emit
-from flask_swagger_ui import get_swaggerui_blueprint
+from common import create_flask_app, register_routes, register_websocket_handlers, run_server, start_status_monitor
 
 # =============================================================================
 # CONSTANTS
@@ -169,36 +167,8 @@ for directory in required_dirs:
     except Exception as e:
         logger.error(f"Could not create directory {directory}: {e}")
 
-try:
-    app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "squeezelite-multiroom-secret")
-    socketio = SocketIO(app, cors_allowed_origins="*")
-
-    # Configure Swagger UI
-    SWAGGER_URL = "/api/docs"  # URL for exposing Swagger UI (without trailing '/')
-    API_URL = "/api/swagger.yaml"  # Our API url (can of course be a local resource)
-
-    # Call factory function to create our blueprint
-    swaggerui_blueprint = get_swaggerui_blueprint(
-        SWAGGER_URL,  # Swagger UI static files will be mapped to '{SWAGGER_URL}/dist/'
-        API_URL,
-        config={  # Swagger UI config overrides
-            "app_name": "Multi Output Player API",
-            "layout": "BaseLayout",
-            "deepLinking": True,
-            "showExtensions": True,
-            "showCommonExtensions": True,
-        },
-    )
-
-    # Register blueprint at URL
-    app.register_blueprint(swaggerui_blueprint)
-
-    logger.info("Flask app, SocketIO, and Swagger UI initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Flask app: {e}")
-    traceback.print_exc()
-    sys.exit(1)
+# Create Flask app and SocketIO instance using common module
+app, socketio = create_flask_app()
 
 CONFIG_FILE = "/app/config/players.yaml"
 STATE_FILE = "/app/config/player_states.yaml"  # NEW: State persistence file
@@ -1188,229 +1158,20 @@ signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
 
-@app.route("/")
-def index():
-    """Main page showing all players"""
-    players = manager.players
-    statuses = manager.get_all_statuses()
-    devices = manager.get_audio_devices()
-    return render_template("index.html", players=players, statuses=statuses, devices=devices)
+# =============================================================================
+# Register Routes and WebSocket Handlers
+# =============================================================================
 
+# Register all Flask routes using the common module
+register_routes(app, manager)
 
-@app.route("/api/swagger.yaml")
-def swagger_yaml():
-    """Serve the Swagger YAML specification"""
-    try:
-        return send_from_directory("/app", "swagger.yaml")
-    except Exception as e:
-        logger.error(f"Error serving swagger.yaml: {e}")
-        return jsonify({"error": "Swagger specification not found"}), 404
+# Register WebSocket handlers using the common module
+register_websocket_handlers(socketio, manager)
 
+# Start status monitoring thread using the common module
+start_status_monitor(socketio, manager)
 
-@app.route("/api/players", methods=["GET"])
-def get_players():
-    """API endpoint to get all players"""
-    return jsonify({"players": manager.players, "statuses": manager.get_all_statuses()})
-
-
-@app.route("/api/devices", methods=["GET"])
-def get_devices():
-    """API endpoint to get audio devices"""
-    return jsonify({"devices": manager.get_audio_devices()})
-
-
-# NEW: State management endpoints
-@app.route("/api/state", methods=["GET"])
-def get_state():
-    """API endpoint to get state information"""
-    return jsonify(manager.get_state_info())
-
-
-@app.route("/api/state/save", methods=["POST"])
-def save_state():
-    """API endpoint to manually save current state"""
-    try:
-        manager.save_state()
-        return jsonify({"success": True, "message": "State saved successfully"})
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Error saving state: {e}"}), 500
-
-
-@app.route("/api/players", methods=["POST"])
-def create_player():
-    """API endpoint to create a new player"""
-    data = request.json
-    name = data.get("name")
-    device = data.get("device")
-    server_ip = data.get("server_ip", "")
-    mac_address = data.get("mac_address", "")
-
-    if not name or not device:
-        return jsonify({"success": False, "message": "Name and device are required"}), 400
-
-    success, message = manager.create_player(name, device, server_ip, mac_address)
-    return jsonify({"success": success, "message": message})
-
-
-@app.route("/api/players/<n>", methods=["PUT"])
-def update_player(name):
-    """API endpoint to update a player"""
-    data = request.json
-    new_name = data.get("name", name)
-    device = data.get("device")
-    server_ip = data.get("server_ip", "")
-    mac_address = data.get("mac_address", "")
-
-    if not device:
-        return jsonify({"success": False, "message": "Device is required"}), 400
-
-    success, message = manager.update_player(name, new_name, device, server_ip, mac_address)
-    if success:
-        return jsonify({"success": success, "message": message, "new_name": new_name})
-    else:
-        return jsonify({"success": success, "message": message}), 400
-
-
-@app.route("/api/players/<n>", methods=["DELETE"])
-def delete_player(name):
-    """API endpoint to delete a player"""
-    success, message = manager.delete_player(name)
-    return jsonify({"success": success, "message": message})
-
-
-@app.route("/api/players/<n>/start", methods=["POST"])
-def start_player(name):
-    """API endpoint to start a player"""
-    success, message = manager.start_player(name)
-    return jsonify({"success": success, "message": message})
-
-
-@app.route("/api/players/<n>/stop", methods=["POST"])
-def stop_player(name):
-    """API endpoint to stop a player"""
-    success, message = manager.stop_player(name)
-    return jsonify({"success": success, "message": message})
-
-
-@app.route("/api/players/<n>/status", methods=["GET"])
-def get_player_status(name):
-    """API endpoint to get player status"""
-    status = manager.get_player_status(name)
-    return jsonify({"running": status})
-
-
-@app.route("/api/players/<n>/volume", methods=["GET"])
-def get_player_volume(name):
-    """API endpoint to get player volume"""
-    try:
-        volume = manager.get_player_volume(name)
-        if volume is None:
-            return jsonify({"success": False, "message": "Player not found"}), 404
-        return jsonify({"success": True, "volume": volume})
-    except Exception as e:
-        logger.error(f"Error in get_player_volume for {name}: {e}")
-        return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
-
-
-@app.route("/api/players/<n>/volume", methods=["POST"])
-def set_player_volume(name):
-    """API endpoint to set player volume"""
-    try:
-        data = request.json
-        volume = data.get("volume")
-
-        if volume is None:
-            return jsonify({"success": False, "message": "Volume is required"}), 400
-
-        try:
-            volume = int(volume)
-        except (ValueError, TypeError):
-            return jsonify({"success": False, "message": "Volume must be a number"}), 400
-
-        success, message = manager.set_player_volume(name, volume)
-        return jsonify({"success": success, "message": message})
-    except Exception as e:
-        logger.error(f"Error in set_player_volume for {name}: {e}")
-        logger.error(f"Request data: {request.get_data()}")
-        return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
-
-
-@app.route("/api/debug/audio", methods=["GET"])
-def debug_audio():
-    """Debug endpoint to check audio device detection"""
-    try:
-        debug_info = {
-            "container_mode": WINDOWS_MODE,
-            "detected_devices": manager.get_audio_devices(),
-            "aplay_available": False,
-            "amixer_available": False,
-            "aplay_output": "",
-            "amixer_cards_output": "",
-            "mixer_controls": {},
-        }
-
-        # Test aplay command
-        try:
-            result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, check=True)
-            debug_info["aplay_available"] = True
-            debug_info["aplay_output"] = result.stdout
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            debug_info["aplay_output"] = str(e)
-
-        # Test amixer command
-        try:
-            result = subprocess.run(["amixer"], capture_output=True, text=True, check=True)
-            debug_info["amixer_available"] = True
-            debug_info["amixer_cards_output"] = result.stdout
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            debug_info["amixer_cards_output"] = str(e)
-
-        # Test mixer controls for each detected hardware device
-        for device in debug_info["detected_devices"]:
-            if device["id"].startswith("hw:"):
-                device_id = device["id"]
-                try:
-                    controls = manager.get_mixer_controls(device_id)
-                    debug_info["mixer_controls"][device_id] = controls
-                except Exception as e:
-                    debug_info["mixer_controls"][device_id] = f"Error: {e}"
-
-        return jsonify(debug_info)
-    except Exception as e:
-        logger.error(f"Error in debug_audio: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@socketio.on("connect")
-def handle_connect():
-    """Handle WebSocket connection"""
-    emit("status_update", manager.get_all_statuses())
-
-
-def status_monitor():
-    """Background thread to monitor player statuses"""
-    logger.info("Starting status monitor thread")
-    while True:
-        try:
-            statuses = manager.get_all_statuses()
-            socketio.emit("status_update", statuses)
-            time.sleep(STATUS_MONITOR_INTERVAL_SECS)
-        except Exception as e:
-            logger.error(f"Error in status monitor: {e}")
-            time.sleep(STATUS_MONITOR_ERROR_DELAY_SECS)
-
-
-# Start status monitoring thread
-try:
-    logger.info("Starting status monitoring thread...")
-    status_thread = threading.Thread(target=status_monitor, daemon=True)
-    status_thread.start()
-    logger.info("Status monitoring thread started successfully")
-except Exception as e:
-    logger.error(f"Failed to start status monitoring thread: {e}")
-    # Continue without status monitoring
-
-# NEW: Start periodic state saving thread
+# Start periodic state saving thread (unique to enhanced version)
 try:
     logger.info("Starting periodic state saving thread...")
     state_thread = threading.Thread(target=manager.auto_save_state_periodically, daemon=True)
@@ -1420,22 +1181,11 @@ except Exception as e:
     logger.error(f"Failed to start periodic state saving thread: {e}")
     # Continue without periodic state saving
 
+
+# =============================================================================
+# Main entry point
+# =============================================================================
+
 if __name__ == "__main__":
-    try:
-        logger.info("Starting Flask-SocketIO server...")
-        logger.info("Server will be available at: http://0.0.0.0:8080")
-
-        # Test if port is available
-        import socket
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex(("localhost", 8080))
-        if result == 0:
-            logger.warning("Port 8080 appears to be in use, but will try to bind anyway")
-        sock.close()
-
-        socketio.run(app, host="0.0.0.0", port=8080, debug=False, allow_unsafe_werkzeug=True)
-    except Exception as e:
-        logger.error(f"Failed to start Flask-SocketIO server: {e}")
-        traceback.print_exc()
-        sys.exit(1)
+    # Start the Flask-SocketIO server using the common module
+    run_server(app, socketio)

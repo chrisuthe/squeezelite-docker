@@ -1,0 +1,502 @@
+#!/usr/bin/env python3
+"""
+Common functionality shared between app.py and app_enhanced.py.
+
+This module contains:
+- Flask and SocketIO initialization
+- All HTTP routes (players, devices, volume, debug, state)
+- WebSocket handlers
+- Status monitoring thread
+- Server startup logic
+
+Both app.py and app_enhanced.py import from this module to avoid code duplication.
+The key difference is the manager implementation they use.
+"""
+
+import logging
+import os
+import re
+import subprocess
+import sys
+import threading
+import time
+import traceback
+
+from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask_socketio import SocketIO, emit
+from flask_swagger_ui import get_swaggerui_blueprint
+
+logger = logging.getLogger(__name__)
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# How often to poll player statuses and emit WebSocket updates
+STATUS_MONITOR_INTERVAL_SECS = 2
+
+# Delay before retrying after an error in status monitor loop
+STATUS_MONITOR_ERROR_DELAY_SECS = 5
+
+# =============================================================================
+# FLASK INITIALIZATION
+# =============================================================================
+
+
+def create_flask_app():
+    """
+    Create and configure the Flask application with SocketIO and Swagger.
+
+    Returns:
+        Tuple of (Flask app, SocketIO instance).
+    """
+    try:
+        app = Flask(__name__)
+        app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "squeezelite-multiroom-secret")
+        socketio = SocketIO(app, cors_allowed_origins="*")
+
+        # Configure Swagger UI
+        SWAGGER_URL = "/api/docs"
+        API_URL = "/api/swagger.yaml"
+
+        swaggerui_blueprint = get_swaggerui_blueprint(
+            SWAGGER_URL,
+            API_URL,
+            config={
+                "app_name": "Multi Output Player API",
+                "layout": "BaseLayout",
+                "deepLinking": True,
+                "showExtensions": True,
+                "showCommonExtensions": True,
+            },
+        )
+
+        app.register_blueprint(swaggerui_blueprint)
+        logger.info("Flask app, SocketIO, and Swagger UI initialized successfully")
+        return app, socketio
+
+    except Exception as e:
+        logger.error(f"Failed to initialize Flask app: {e}")
+        traceback.print_exc()
+        sys.exit(1)
+
+
+# =============================================================================
+# ROUTE REGISTRATION
+# =============================================================================
+
+
+def register_routes(app, manager):
+    """
+    Register all Flask HTTP routes.
+
+    Args:
+        app: Flask application instance.
+        manager: Player manager instance (PlayerManager or SqueezeliteManager).
+    """
+
+    @app.route("/")
+    def index():
+        """Main page showing all players"""
+        players = manager.players
+        statuses = manager.get_all_statuses()
+        devices = manager.get_audio_devices()
+        return render_template("index.html", players=players, statuses=statuses, devices=devices)
+
+    @app.route("/api/swagger.yaml")
+    def swagger_yaml():
+        """Serve the Swagger YAML specification"""
+        try:
+            return send_from_directory("/app", "swagger.yaml")
+        except Exception as e:
+            logger.error(f"Error serving swagger.yaml: {e}")
+            return jsonify({"error": "Swagger specification not found"}), 404
+
+    @app.route("/api/players", methods=["GET"])
+    def get_players():
+        """API endpoint to get all players"""
+        return jsonify({"players": manager.players, "statuses": manager.get_all_statuses()})
+
+    @app.route("/api/devices", methods=["GET"])
+    def get_devices():
+        """API endpoint to get audio devices (ALSA)"""
+        return jsonify({"devices": manager.get_audio_devices()})
+
+    @app.route("/api/devices/portaudio", methods=["GET"])
+    def get_portaudio_devices():
+        """API endpoint to get PortAudio devices (for Sendspin)"""
+        try:
+            result = subprocess.run(
+                ["sendspin", "--list-audio-devices"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            # Parse the output - sendspin lists devices as "[0] Device Name"
+            devices = []
+            for line in result.stdout.strip().split("\n"):
+                line = line.strip()
+                # Match lines like "[0] HDA NVidia: HDMI 0 (hw:1,3) (default)"
+                match = re.match(r"^\[(\d+)\]\s*(.+)$", line)
+                if match:
+                    index = match.group(1)
+                    name = match.group(2)
+                    devices.append({"index": index, "name": name, "raw": line})
+            return jsonify(
+                {
+                    "success": True,
+                    "devices": devices,
+                    "raw_output": result.stdout,
+                    "note": "Use device index (0, 1, 2) with --audio-device for sendspin",
+                }
+            )
+        except FileNotFoundError:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "sendspin binary not found",
+                    "devices": [],
+                }
+            )
+        except subprocess.TimeoutExpired:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "Timeout listing audio devices",
+                    "devices": [],
+                }
+            )
+        except Exception as e:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": str(e),
+                    "devices": [],
+                }
+            )
+
+    @app.route("/api/providers", methods=["GET"])
+    def get_providers():
+        """API endpoint to get available player providers"""
+        # Check if manager has get_available_providers method (PlayerManager)
+        if hasattr(manager, "get_available_providers"):
+            return jsonify({"providers": manager.get_available_providers()})
+        else:
+            # For SqueezeliteManager, return default squeezelite provider
+            return jsonify(
+                {
+                    "providers": [
+                        {
+                            "type": "squeezelite",
+                            "name": "Squeezelite",
+                            "description": "Logitech Media Server compatible player",
+                        }
+                    ]
+                }
+            )
+
+    @app.route("/api/players", methods=["POST"])
+    def create_player():
+        """API endpoint to create a new player"""
+        data = request.json
+        name = data.get("name")
+        device = data.get("device", "default")
+
+        if not name:
+            return jsonify({"success": False, "message": "Name is required"}), 400
+
+        # Check if manager uses new PlayerManager or old SqueezeliteManager
+        if hasattr(manager, "create_player"):
+            # PlayerManager signature: supports provider_type and extra config
+            if hasattr(manager, "providers"):
+                provider_type = data.get("provider", "squeezelite")
+                server_ip = data.get("server_ip", "")
+                server_url = data.get("server_url", "")
+                mac_address = data.get("mac_address", "")
+
+                # Extract any extra provider-specific config
+                extra_config = {
+                    k: v
+                    for k, v in data.items()
+                    if k not in ("name", "device", "provider", "server_ip", "server_url", "mac_address")
+                }
+
+                success, message = manager.create_player(
+                    name=name,
+                    device=device,
+                    provider_type=provider_type,
+                    server_ip=server_ip,
+                    server_url=server_url,
+                    mac_address=mac_address,
+                    **extra_config,
+                )
+            else:
+                # SqueezeliteManager signature: simpler parameters
+                server_ip = data.get("server_ip", "")
+                mac_address = data.get("mac_address", "")
+                success, message = manager.create_player(name, device, server_ip, mac_address)
+        else:
+            return jsonify({"success": False, "message": "Manager does not support player creation"}), 500
+
+        return jsonify({"success": success, "message": message})
+
+    @app.route("/api/players/<name>", methods=["PUT"])
+    def update_player(name):
+        """API endpoint to update a player"""
+        data = request.json
+        new_name = data.get("name", name)
+        device = data.get("device", "default")
+
+        # Check if manager uses new PlayerManager or old SqueezeliteManager
+        if hasattr(manager, "update_player"):
+            if hasattr(manager, "providers"):
+                # PlayerManager signature
+                provider_type = data.get("provider")
+                server_ip = data.get("server_ip", "")
+                server_url = data.get("server_url", "")
+                mac_address = data.get("mac_address", "")
+
+                extra_config = {
+                    k: v
+                    for k, v in data.items()
+                    if k not in ("name", "device", "provider", "server_ip", "server_url", "mac_address")
+                }
+
+                success, message = manager.update_player(
+                    old_name=name,
+                    new_name=new_name,
+                    device=device,
+                    provider_type=provider_type,
+                    server_ip=server_ip,
+                    server_url=server_url,
+                    mac_address=mac_address,
+                    **extra_config,
+                )
+            else:
+                # SqueezeliteManager signature
+                server_ip = data.get("server_ip", "")
+                mac_address = data.get("mac_address", "")
+                success, message = manager.update_player(name, new_name, device, server_ip, mac_address)
+        else:
+            return jsonify({"success": False, "message": "Manager does not support player updates"}), 500
+
+        if success:
+            return jsonify({"success": success, "message": message, "new_name": new_name})
+        else:
+            return jsonify({"success": success, "message": message}), 400
+
+    @app.route("/api/players/<name>", methods=["DELETE"])
+    def delete_player(name):
+        """API endpoint to delete a player"""
+        success, message = manager.delete_player(name)
+        return jsonify({"success": success, "message": message})
+
+    @app.route("/api/players/<name>/start", methods=["POST"])
+    def start_player(name):
+        """API endpoint to start a player"""
+        success, message = manager.start_player(name)
+        return jsonify({"success": success, "message": message})
+
+    @app.route("/api/players/<name>/stop", methods=["POST"])
+    def stop_player(name):
+        """API endpoint to stop a player"""
+        success, message = manager.stop_player(name)
+        return jsonify({"success": success, "message": message})
+
+    @app.route("/api/players/<name>/status", methods=["GET"])
+    def get_player_status(name):
+        """API endpoint to get player status"""
+        status = manager.get_player_status(name)
+        return jsonify({"running": status})
+
+    @app.route("/api/players/<n>/volume", methods=["GET"])
+    def get_player_volume(n):
+        """API endpoint to get player volume"""
+        try:
+            volume = manager.get_player_volume(n)
+            if volume is None:
+                return jsonify({"success": False, "message": "Player not found"}), 404
+            return jsonify({"success": True, "volume": volume})
+        except Exception as e:
+            logger.error(f"Error in get_player_volume for {n}: {e}")
+            return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
+
+    @app.route("/api/players/<n>/volume", methods=["POST"])
+    def set_player_volume(n):
+        """API endpoint to set player volume"""
+        try:
+            data = request.json
+            volume = data.get("volume")
+
+            if volume is None:
+                return jsonify({"success": False, "message": "Volume is required"}), 400
+
+            try:
+                volume = int(volume)
+            except (ValueError, TypeError):
+                return jsonify({"success": False, "message": "Volume must be a number"}), 400
+
+            success, message = manager.set_player_volume(n, volume)
+            return jsonify({"success": success, "message": message})
+        except Exception as e:
+            logger.error(f"Error in set_player_volume for {n}: {e}")
+            logger.error(f"Request data: {request.get_data()}")
+            return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
+
+    @app.route("/api/debug/audio", methods=["GET"])
+    def debug_audio():
+        """Debug endpoint to check audio device detection"""
+        try:
+            WINDOWS_MODE = os.environ.get("SQUEEZELITE_WINDOWS_MODE", "0") == "1"
+            debug_info = {
+                "container_mode": WINDOWS_MODE,
+                "detected_devices": manager.get_audio_devices(),
+                "aplay_available": False,
+                "amixer_available": False,
+                "aplay_output": "",
+                "amixer_cards_output": "",
+                "mixer_controls": {},
+            }
+
+            # Test aplay command
+            try:
+                result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, check=True)
+                debug_info["aplay_available"] = True
+                debug_info["aplay_output"] = result.stdout
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                debug_info["aplay_output"] = str(e)
+
+            # Test amixer command
+            try:
+                result = subprocess.run(["amixer"], capture_output=True, text=True, check=True)
+                debug_info["amixer_available"] = True
+                debug_info["amixer_cards_output"] = result.stdout
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                debug_info["amixer_cards_output"] = str(e)
+
+            # Test mixer controls for each detected hardware device
+            if hasattr(manager, "get_mixer_controls"):
+                for device in debug_info["detected_devices"]:
+                    if device["id"].startswith("hw:"):
+                        device_id = device["id"]
+                        try:
+                            controls = manager.get_mixer_controls(device_id)
+                            debug_info["mixer_controls"][device_id] = controls
+                        except Exception as e:
+                            debug_info["mixer_controls"][device_id] = f"Error: {e}"
+
+            return jsonify(debug_info)
+        except Exception as e:
+            logger.error(f"Error in debug_audio: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    # State management endpoints (only for enhanced version with SqueezeliteManager)
+    @app.route("/api/state", methods=["GET"])
+    def get_state():
+        """API endpoint to get state information"""
+        if hasattr(manager, "get_state_info"):
+            return jsonify(manager.get_state_info())
+        else:
+            return jsonify({"message": "State persistence not available in this version"}), 404
+
+    @app.route("/api/state/save", methods=["POST"])
+    def save_state():
+        """API endpoint to manually save current state"""
+        if hasattr(manager, "save_state"):
+            try:
+                manager.save_state()
+                return jsonify({"success": True, "message": "State saved successfully"})
+            except Exception as e:
+                return jsonify({"success": False, "message": f"Error saving state: {e}"}), 500
+        else:
+            return jsonify({"success": False, "message": "State persistence not available in this version"}), 404
+
+
+# =============================================================================
+# WEBSOCKET HANDLERS
+# =============================================================================
+
+
+def register_websocket_handlers(socketio, manager):
+    """
+    Register WebSocket event handlers.
+
+    Args:
+        socketio: SocketIO instance.
+        manager: Player manager instance.
+    """
+
+    @socketio.on("connect")
+    def handle_connect():
+        """Handle WebSocket connection"""
+        emit("status_update", manager.get_all_statuses())
+
+
+def start_status_monitor(socketio, manager):
+    """
+    Start the background thread that monitors player statuses.
+
+    Args:
+        socketio: SocketIO instance for emitting updates.
+        manager: Player manager instance.
+
+    Returns:
+        threading.Thread instance (already started).
+    """
+
+    def status_monitor():
+        """Background thread to monitor player statuses"""
+        logger.info("Starting status monitor thread")
+        while True:
+            try:
+                statuses = manager.get_all_statuses()
+                socketio.emit("status_update", statuses)
+                time.sleep(STATUS_MONITOR_INTERVAL_SECS)
+            except Exception as e:
+                logger.error(f"Error in status monitor: {e}")
+                time.sleep(STATUS_MONITOR_ERROR_DELAY_SECS)
+
+    try:
+        logger.info("Starting status monitoring thread...")
+        status_thread = threading.Thread(target=status_monitor, daemon=True)
+        status_thread.start()
+        logger.info("Status monitoring thread started successfully")
+        return status_thread
+    except Exception as e:
+        logger.error(f"Failed to start status monitoring thread: {e}")
+        return None
+
+
+# =============================================================================
+# SERVER STARTUP
+# =============================================================================
+
+
+def run_server(app, socketio, host="0.0.0.0", port=8080):
+    """
+    Start the Flask-SocketIO server.
+
+    Args:
+        app: Flask application instance.
+        socketio: SocketIO instance.
+        host: Host address to bind to.
+        port: Port number to bind to.
+    """
+    try:
+        logger.info("Starting Flask-SocketIO server...")
+        logger.info(f"Server will be available at: http://{host}:{port}")
+
+        # Test if port is available
+        import socket
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex(("localhost", port))
+        if result == 0:
+            logger.warning(f"Port {port} appears to be in use, but will try to bind anyway")
+        sock.close()
+
+        socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
+    except Exception as e:
+        logger.error(f"Failed to start Flask-SocketIO server: {e}")
+        traceback.print_exc()
+        sys.exit(1)

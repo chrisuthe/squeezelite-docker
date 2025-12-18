@@ -52,3 +52,34 @@ quote-style = "double"
 
 # Indent with spaces
 indent-style = "space"
+
+[tool.pytest.ini_options]
+# Test discovery patterns
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Output options
+addopts = [
+    "-ra",                    # Show summary of all test outcomes
+    "--strict-markers",       # Treat unregistered markers as errors
+    "--strict-config",        # Treat config errors as errors
+    "-v",                     # Verbose output
+    "--tb=short",            # Shorter traceback format
+    "--maxfail=5",           # Stop after 5 failures
+]
+
+# Markers for organizing tests
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+# Coverage options (if using pytest-cov)
+# Uncomment to enable coverage reporting
+# addopts = ["--cov=app", "--cov-report=html", "--cov-report=term"]
+
+# Minimum Python version
+minversion = "7.0"

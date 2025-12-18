@@ -7,6 +7,7 @@ and configuration validation.
 
 import hashlib
 import logging
+import os
 from typing import Any
 
 from .base import PlayerConfig, PlayerProvider
@@ -17,13 +18,48 @@ logger = logging.getLogger(__name__)
 # CONSTANTS
 # =============================================================================
 
-# Default squeezelite audio parameters
-DEFAULT_BUFFER_SIZE = "80"
-DEFAULT_BUFFER_PARAMS = "500:2000"
-DEFAULT_CLOSE_TIMEOUT = "5"
-DEFAULT_SAMPLE_RATE = "44100"
+# Squeezelite Audio Buffer Configuration
+# These parameters control audio buffering and device behavior in squeezelite.
+# All values can be overridden via environment variables.
+
+# ALSA buffer time in milliseconds (squeezelite -a parameter)
+# Controls the ALSA period size. Lower values reduce latency but may cause
+# audio dropouts on slower systems. Higher values increase latency but provide
+# more stable playback. Typical range: 20-200ms.
+# Default: 80ms
+# Environment variable: SQUEEZELITE_BUFFER_TIME
+DEFAULT_BUFFER_SIZE = os.environ.get("SQUEEZELITE_BUFFER_TIME", "80")
+
+# Internal stream and output buffer sizes in KB (squeezelite -b parameter)
+# Format: "stream_buffer:output_buffer"
+# - stream_buffer: Size of internal stream buffer before audio processing
+# - output_buffer: Size of output buffer after audio processing
+# Larger buffers provide more resilience against network/CPU issues but use
+# more memory and increase latency. Smaller buffers reduce memory and latency
+# but may cause underruns.
+# Default: 500KB stream, 2000KB output
+# Environment variable: SQUEEZELITE_BUFFER_PARAMS
+DEFAULT_BUFFER_PARAMS = os.environ.get("SQUEEZELITE_BUFFER_PARAMS", "500:2000")
+
+# Output device close timeout in seconds (squeezelite -C parameter)
+# Number of seconds of silence before closing the audio output device.
+# This allows the audio device to enter power-saving mode during inactivity.
+# Set to 0 to keep device always open (prevents power-saving but reduces
+# startup latency when playback resumes).
+# Default: 5 seconds
+# Environment variable: SQUEEZELITE_CLOSE_TIMEOUT
+DEFAULT_CLOSE_TIMEOUT = os.environ.get("SQUEEZELITE_CLOSE_TIMEOUT", "5")
+
+# Default sample rate for null device output (squeezelite -r parameter)
+# Used when outputting to the null device (no audio hardware). This must be
+# specified explicitly for null device operation.
+# Default: 44100Hz (CD quality)
+# Environment variable: SQUEEZELITE_SAMPLE_RATE
+DEFAULT_SAMPLE_RATE = os.environ.get("SQUEEZELITE_SAMPLE_RATE", "44100")
 
 # Null device identifier for fallback
+# When the configured audio device is unavailable, squeezelite falls back to
+# this null device to maintain LMS connection without audio output.
 NULL_DEVICE = "null"
 
 
@@ -235,19 +271,59 @@ class SqueezeliteProvider(PlayerProvider):
         Uses MD5 hash to generate a locally-administered unicast MAC
         that is deterministic for the same player name.
 
+        Why MD5 is used:
+            MD5 provides a simple, deterministic hashing mechanism that ensures
+            the same player name will always generate the same MAC address across
+            restarts and reconfigurations. While MD5 is cryptographically broken
+            for security purposes, it remains perfectly suitable for generating
+            non-security-critical identifiers like MAC addresses. The hash spreads
+            player names uniformly across the MAC address space, minimizing the
+            chance of accidental collisions.
+
+        MAC Address Format:
+            The generated MAC address follows the IEEE 802 standard format:
+            XX:XX:XX:XX:XX:XX (6 octets separated by colons, lowercase hex).
+
+            The first octet is specially formatted with:
+            - Bit 1 (0x02) SET: Marks this as a locally-administered address
+              (not assigned by a manufacturer), which is appropriate for
+              software-generated MACs.
+            - Bit 0 (0x01) CLEARED: Ensures this is a unicast address (not
+              multicast/broadcast), which is required for individual device
+              identification in LMS.
+
+        Uniqueness per player name:
+            Each unique player name produces a unique 128-bit MD5 hash. The first
+            48 bits (6 bytes) of this hash become the MAC address. With MD5's
+            uniform distribution, the probability of two different player names
+            producing the same MAC address is extremely low (approximately
+            1 in 2^48, or 1 in 281 trillion). In practice, this ensures each
+            player gets a unique identifier that Logitech Media Server can use
+            to distinguish and remember individual players.
+
         Args:
             name: Player name to hash.
 
         Returns:
             MAC address string in format XX:XX:XX:XX:XX:XX.
         """
+        # Generate MD5 hash of the player name
+        # MD5 produces a 128-bit (16-byte) digest that is deterministic -
+        # the same input always produces the same output
         hash_bytes = hashlib.md5(name.encode()).digest()
 
+        # Extract first 6 bytes from the hash for the MAC address
         # Use first 6 bytes, set locally administered bit (0x02)
         # and clear multicast bit (0x01) on first octet
         mac_bytes = list(hash_bytes[:6])
+
+        # Modify the first octet to comply with IEEE 802 MAC address standards:
+        # - OR with 0x02: Sets the locally-administered bit (bit 1)
+        # - AND with 0xFE: Clears the multicast bit (bit 0)
+        # This creates a locally-administered unicast MAC address
         mac_bytes[0] = (mac_bytes[0] | 0x02) & 0xFE
 
+        # Format as standard colon-separated hex string (e.g., "a2:3f:4d:1e:8c:9b")
         return ":".join(f"{b:02x}" for b in mac_bytes)
 
     def prepare_config(self, config: dict[str, Any]) -> dict[str, Any]:
