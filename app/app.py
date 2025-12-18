@@ -7,8 +7,10 @@ Provides a REST API and web interface for creating, configuring, and controlling
 audio players across different rooms/zones.
 
 Key Components:
-    - SqueezeliteManager: Core class handling player lifecycle, audio devices,
-      and volume control via ALSA
+    - SqueezeliteManager: Coordinates player lifecycle using focused manager classes
+    - ConfigManager: Handles configuration persistence
+    - AudioManager: Handles device detection and volume control
+    - ProcessManager: Handles subprocess lifecycle
     - REST API: Endpoints for player CRUD operations, status, and volume control
     - WebSocket: Real-time status updates to connected browsers
     - Swagger UI: Interactive API documentation at /api/docs
@@ -23,10 +25,9 @@ Usage:
     Via supervisor: supervisord -c /etc/supervisor/conf.d/supervisord.conf
 """
 
+import hashlib
 import logging
 import os
-import re
-import signal
 import subprocess
 import sys
 import threading
@@ -34,67 +35,20 @@ import time
 import traceback
 from typing import Any
 
-import yaml
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_socketio import SocketIO, emit
 from flask_swagger_ui import get_swaggerui_blueprint
+from managers import AudioManager, ConfigManager, ProcessManager
 
 # =============================================================================
 # CONSTANTS
 # =============================================================================
-
-# -----------------------------------------------------------------------------
-# ALSA Mixer Control Names
-# -----------------------------------------------------------------------------
-# These arrays define which ALSA mixer controls to check when reading/setting
-# volume. ALSA sound cards expose different controls depending on the hardware.
-# Common control names include:
-#   - Master: Main output volume (most common)
-#   - PCM: Digital audio volume
-#   - Speaker: Built-in speaker output
-#   - Headphone: Headphone jack output
-#   - Digital: Digital/SPDIF output
-#   - Capture: Input/recording level (read-only for our purposes)
-#
-# The code tries each control in order until one works.
-
-# Default fallback when no controls can be detected
-DEFAULT_MIXER_CONTROLS = ["Master", "PCM"]
-
-# Controls to try when reading volume (includes Capture for status reporting)
-VOLUME_READ_CONTROLS = ["Master", "PCM", "Speaker", "Headphone", "Digital", "Capture"]
-
-# Controls to try when setting volume (excludes Capture - it's for input levels)
-VOLUME_WRITE_CONTROLS = ["Master", "PCM", "Speaker", "Headphone", "Digital"]
-
-# Virtual/software devices that don't support hardware volume control
-VIRTUAL_AUDIO_DEVICES = ["null", "pulse", "dmix", "default"]
-
-# -----------------------------------------------------------------------------
-# Timing Constants (in seconds)
-# -----------------------------------------------------------------------------
-
-# Delay after starting a process to check if it failed immediately
-PROCESS_STARTUP_DELAY_SECS = 0.5
-
-# Timeout when waiting for process to stop gracefully (SIGTERM)
-PROCESS_STOP_TIMEOUT_SECS = 5
-
-# Timeout when waiting for process to be killed forcefully (SIGKILL)
-PROCESS_KILL_TIMEOUT_SECS = 2
 
 # How often to poll player statuses and emit WebSocket updates
 STATUS_MONITOR_INTERVAL_SECS = 2
 
 # Delay before retrying after an error in status monitor loop
 STATUS_MONITOR_ERROR_DELAY_SECS = 5
-
-# -----------------------------------------------------------------------------
-# Default Values
-# -----------------------------------------------------------------------------
-
-# Default volume percentage for virtual devices or when detection fails
-DEFAULT_VOLUME_PERCENT = 75
 
 # =============================================================================
 # LOGGING CONFIGURATION
@@ -178,163 +132,82 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
+# Configuration paths
 CONFIG_FILE = "/app/config/players.yaml"
 PLAYERS_DIR = "/app/config/players"
+LOG_DIR = "/app/logs"
 
 # Ensure directories exist
 os.makedirs("/app/config", exist_ok=True)
 os.makedirs(PLAYERS_DIR, exist_ok=True)
-os.makedirs("/app/logs", exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
 
 
 class SqueezeliteManager:
     """
     Manages Squeezelite audio player instances.
 
-    Handles player lifecycle (create, start, stop, delete), configuration
-    persistence, audio device detection, and volume control via ALSA.
+    Coordinates player lifecycle using focused manager classes:
+    - ConfigManager: Configuration persistence
+    - AudioManager: Device detection and volume control
+    - ProcessManager: Subprocess lifecycle
+
+    This class handles Squeezelite-specific logic like command building
+    and player CRUD operations that span multiple concerns.
 
     Attributes:
-        players: Dictionary mapping player names to their configuration dicts.
-                 Each config contains: name, device, server_ip, mac_address, enabled, volume
-        processes: Dictionary mapping player names to their subprocess.Popen instances.
+        config: ConfigManager instance for player configuration.
+        audio: AudioManager instance for device/volume operations.
+        process: ProcessManager instance for subprocess handling.
     """
 
-    # Type aliases for clarity
-    PlayerConfig = dict[str, Any]  # Keys: name, device, server_ip, mac_address, enabled, volume
-    AudioDevice = dict[str, str]  # Keys: id, name, card, device
+    # Type alias for player configuration
+    PlayerConfig = dict[str, Any]
 
-    def __init__(self) -> None:
-        self.players: dict[str, SqueezeliteManager.PlayerConfig] = {}
-        self.processes: dict[str, subprocess.Popen[bytes]] = {}
-        self.load_config()
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        audio_manager: AudioManager,
+        process_manager: ProcessManager,
+    ) -> None:
+        """
+        Initialize the SqueezeliteManager.
+
+        Args:
+            config_manager: ConfigManager instance for configuration.
+            audio_manager: AudioManager instance for audio operations.
+            process_manager: ProcessManager instance for process handling.
+        """
+        self.config = config_manager
+        self.audio = audio_manager
+        self.process = process_manager
+
+    @property
+    def players(self) -> dict[str, PlayerConfig]:
+        """Get all player configurations."""
+        return self.config.players
 
     def load_config(self) -> None:
-        """
-        Load player configuration from the YAML configuration file.
-
-        Reads CONFIG_FILE (/app/config/players.yaml) and populates self.players
-        with stored player configurations. If the file doesn't exist or contains
-        invalid YAML, initializes with an empty dictionary.
-
-        Side Effects:
-            - Modifies self.players dictionary
-            - Logs errors if file reading or YAML parsing fails
-
-        Returns:
-            None
-        """
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE) as f:
-                    self.players = yaml.safe_load(f) or {}
-            except Exception as e:
-                logger.error(f"Error loading config: {e}")
-                self.players = {}
-        else:
-            self.players = {}
+        """Load player configuration from file."""
+        self.config.load()
 
     def save_config(self) -> None:
+        """Save player configuration to file."""
+        self.config.save()
+
+    def get_audio_devices(self) -> list[dict[str, str]]:
+        """Get list of available audio devices."""
+        return self.audio.get_devices()
+
+    def create_player(
+        self,
+        name: str,
+        device: str,
+        server_ip: str = "",
+        mac_address: str = "",
+    ) -> tuple[bool, str]:
         """
-        Save current player configuration to the YAML configuration file.
-
-        Writes self.players dictionary to CONFIG_FILE in YAML format.
-        Uses block style (not flow style) for human readability.
-
-        Side Effects:
-            - Writes to CONFIG_FILE (/app/config/players.yaml)
-            - Logs errors if file writing fails
-
-        Returns:
-            None
-        """
-        try:
-            with open(CONFIG_FILE, "w") as f:
-                yaml.dump(self.players, f, default_flow_style=False)
-        except Exception as e:
-            logger.error(f"Error saving config: {e}")
-
-    def get_audio_devices(self) -> list["SqueezeliteManager.AudioDevice"]:
-        """Get list of available audio devices.
-
-        Returns:
-            List of audio device dictionaries, each containing:
-            - id: ALSA device identifier (e.g., 'hw:0,0', 'null', 'default')
-            - name: Human-readable device name
-            - card: ALSA card number or identifier
-            - device: ALSA device number
-        """
-        if WINDOWS_MODE:
-            logger.info("Windows mode detected - returning simulated audio devices")
-            return [
-                {"id": "default", "name": "Default Audio Device (Windows)", "card": "0", "device": "0"},
-                {"id": "pulse", "name": "PulseAudio (Network)", "card": "pulse", "device": "0"},
-                {"id": "tcp:host.docker.internal:4713", "name": "Network Audio Stream", "card": "net", "device": "0"},
-            ]
-
-        # Always provide fallback devices
-        fallback_devices = [
-            {"id": "null", "name": "Null Audio Device (Silent)", "card": "null", "device": "0"},
-            {"id": "default", "name": "Default Audio Device", "card": "0", "device": "0"},
-            {"id": "dmix", "name": "Software Mixing Device", "card": "dmix", "device": "0"},
-        ]
-
-        try:
-            logger.debug("Attempting to detect hardware audio devices with aplay -l")
-            result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, check=True)
-            devices = []
-
-            logger.debug(f"aplay -l output:\n{result.stdout}")
-
-            # Parse actual audio devices
-            for line in result.stdout.split("\n"):
-                if "card" in line and ":" in line:
-                    # Parse line like "card 0: PCH [HDA Intel PCH], device 0: ALC887-VD Analog [ALC887-VD Analog]"
-                    parts = line.split(":")
-                    if len(parts) >= 2:
-                        card_info = parts[0].strip()
-                        device_info = parts[1].strip()
-                        # Extract card and device numbers
-                        try:
-                            card_num = card_info.split()[1]
-                            if "device" in line:
-                                device_num = line.split("device")[1].split(":")[0].strip()
-                                device_id = f"hw:{card_num},{device_num}"
-                                device_name = device_info.split("[")[0].strip() if "[" in device_info else device_info
-                                devices.append(
-                                    {
-                                        "id": device_id,
-                                        "name": f"{device_name} ({device_id})",
-                                        "card": card_num,
-                                        "device": device_num,
-                                    }
-                                )
-                                logger.debug(f"Found hardware device: {device_name} -> {device_id}")
-                        except (IndexError, ValueError) as e:
-                            logger.warning(f"Error parsing audio device line: {line} - {e}")
-                            continue
-
-            # If we found real devices, add them to fallback devices
-            if devices:
-                logger.info(f"Found {len(devices)} hardware audio devices")
-                return fallback_devices + devices
-            else:
-                logger.warning("No hardware audio devices found in aplay output, using fallback devices only")
-                return fallback_devices
-
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"Could not get audio devices list (aplay failed): {e}")
-            logger.debug(f"aplay stderr: {e.stderr.decode() if e.stderr else 'No stderr'}")
-            return fallback_devices
-        except FileNotFoundError:
-            logger.warning("aplay command not found, using fallback devices only")
-            return fallback_devices
-        except Exception as e:
-            logger.error(f"Unexpected error getting audio devices: {e}")
-            return fallback_devices
-
-    def create_player(self, name: str, device: str, server_ip: str = "", mac_address: str = "") -> tuple[bool, str]:
-        """Create a new squeezelite player.
+        Create a new squeezelite player.
 
         Args:
             name: Unique name for the player (used as identifier).
@@ -345,18 +218,16 @@ class SqueezeliteManager:
         Returns:
             Tuple of (success: bool, message: str).
         """
-        if name in self.players:
+        if self.config.player_exists(name):
             return False, "Player with this name already exists"
 
         if not mac_address:
             # Generate a MAC address based on the player name
-            import hashlib
-
             hash_obj = hashlib.md5(name.encode())
             mac_hex = hash_obj.hexdigest()[:12]
             mac_address = ":".join([mac_hex[i : i + 2] for i in range(0, 12, 2)])
 
-        player_config = {
+        player_config: SqueezeliteManager.PlayerConfig = {
             "name": name,
             "device": device,
             "server_ip": server_ip,
@@ -365,14 +236,20 @@ class SqueezeliteManager:
             "volume": 75,
         }
 
-        self.players[name] = player_config
-        self.save_config()
+        self.config.set_player(name, player_config)
+        self.config.save()
         return True, "Player created successfully"
 
     def update_player(
-        self, old_name: str, new_name: str, device: str, server_ip: str = "", mac_address: str = ""
+        self,
+        old_name: str,
+        new_name: str,
+        device: str,
+        server_ip: str = "",
+        mac_address: str = "",
     ) -> tuple[bool, str]:
-        """Update an existing squeezelite player.
+        """
+        Update an existing squeezelite player.
 
         Args:
             old_name: Current name of the player to update.
@@ -384,11 +261,11 @@ class SqueezeliteManager:
         Returns:
             Tuple of (success: bool, message: str).
         """
-        if old_name not in self.players:
+        if not self.config.player_exists(old_name):
             return False, "Player not found"
 
         # If name is changing, check if new name already exists
-        if old_name != new_name and new_name in self.players:
+        if old_name != new_name and self.config.player_exists(new_name):
             return False, "Player with this name already exists"
 
         # Stop the player if it's running (we'll need to restart with new config)
@@ -397,7 +274,7 @@ class SqueezeliteManager:
             self.stop_player(old_name)
 
         # Get current player config
-        player_config = self.players[old_name].copy()
+        player_config = self.config.get_player(old_name).copy()
 
         # Update the configuration
         player_config["name"] = new_name
@@ -406,16 +283,13 @@ class SqueezeliteManager:
         if mac_address:
             player_config["mac_address"] = mac_address
 
-        # If name changed, remove old entry and add new one
+        # If name changed, rename in config
         if old_name != new_name:
-            del self.players[old_name]
-            # Also remove from processes if exists
-            if old_name in self.processes:
-                del self.processes[old_name]
+            self.config.delete_player(old_name)
 
         # Save updated config
-        self.players[new_name] = player_config
-        self.save_config()
+        self.config.set_player(new_name, player_config)
+        self.config.save()
 
         # Restart the player if it was running
         if was_running:
@@ -428,7 +302,8 @@ class SqueezeliteManager:
         return True, "Player updated successfully"
 
     def delete_player(self, name: str) -> tuple[bool, str]:
-        """Delete a player.
+        """
+        Delete a player.
 
         Stops the player process if running and removes from configuration.
 
@@ -438,45 +313,43 @@ class SqueezeliteManager:
         Returns:
             Tuple of (success: bool, message: str).
         """
-        if name not in self.players:
+        if not self.config.player_exists(name):
             return False, "Player not found"
 
         # Stop the player if running
         self.stop_player(name)
 
         # Remove from config
-        del self.players[name]
-        self.save_config()
+        self.config.delete_player(name)
+        self.config.save()
         return True, "Player deleted successfully"
 
-    def start_player(self, name: str) -> tuple[bool, str]:
-        """Start a squeezelite player process.
-
-        Launches a new squeezelite subprocess with the player's configuration.
-        If the configured audio device fails, falls back to null device.
+    def _build_squeezelite_command(self, player: PlayerConfig) -> list[str]:
+        """
+        Build the squeezelite command for a player.
 
         Args:
-            name: Name of the player to start.
+            player: Player configuration dictionary.
 
         Returns:
-            Tuple of (success: bool, message: str).
+            List of command arguments.
         """
-        if name not in self.players:
-            return False, "Player not found"
-
-        if name in self.processes and self.processes[name].poll() is None:
-            return False, "Player already running"
-
-        player = self.players[name]
-
-        # Build squeezelite command
-        cmd = ["squeezelite", "-n", player["name"], "-o", player["device"], "-m", player["mac_address"]]
+        name = player["name"]
+        cmd = [
+            "squeezelite",
+            "-n",
+            player["name"],
+            "-o",
+            player["device"],
+            "-m",
+            player["mac_address"],
+        ]
 
         if player.get("server_ip"):
             cmd.extend(["-s", player["server_ip"]])
 
         # Add logging
-        log_file = f"/app/logs/{name}.log"
+        log_file = self.process.get_log_path(name)
         cmd.extend(["-f", log_file])
 
         # Add options for better compatibility with virtual/missing devices
@@ -495,129 +368,102 @@ class SqueezeliteManager:
         if player["device"] == "null":
             cmd.extend(["-r", "44100"])  # Set sample rate for null device
 
+        return cmd
+
+    def _build_fallback_command(self, player: PlayerConfig) -> list[str]:
+        """
+        Build a fallback command using null device.
+
+        Args:
+            player: Player configuration dictionary.
+
+        Returns:
+            List of command arguments for null device fallback.
+        """
+        name = player["name"]
+        cmd = [
+            "squeezelite",
+            "-n",
+            player["name"],
+            "-o",
+            "null",  # Use null device
+            "-m",
+            player["mac_address"],
+        ]
+
+        if player.get("server_ip"):
+            cmd.extend(["-s", player["server_ip"]])
+
+        log_file = self.process.get_log_path(name)
+        cmd.extend(["-f", log_file])
+
+        cmd.extend(
+            [
+                "-a",
+                "80",
+                "-b",
+                "500:2000",
+                "-C",
+                "5",
+                "-r",
+                "44100",  # Required for null device
+            ]
+        )
+
+        return cmd
+
+    def start_player(self, name: str) -> tuple[bool, str]:
+        """
+        Start a squeezelite player process.
+
+        Launches a new squeezelite subprocess with the player's configuration.
+        If the configured audio device fails, falls back to null device.
+
+        Args:
+            name: Name of the player to start.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+        """
+        player = self.config.get_player(name)
+        if not player:
+            return False, "Player not found"
+
+        if self.process.is_running(name):
+            return False, "Player already running"
+
+        # Build commands
+        cmd = self._build_squeezelite_command(player)
+
+        # Only use fallback if not already using null device
+        fallback_cmd = None
+        if player["device"] != "null":
+            fallback_cmd = self._build_fallback_command(player)
+
         logger.info(f"Starting player {name} with command: {' '.join(cmd)}")
 
-        try:
-            # Start the process
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+        success, message = self.process.start(name, cmd, fallback_cmd)
 
-            self.processes[name] = process
+        if success and fallback_cmd and "fallback" in message.lower():
+            return True, f"Player {name} started with null device (audio device '{player['device']}' not available)"
 
-            # Give the process a moment to start and check if it fails immediately
-            time.sleep(PROCESS_STARTUP_DELAY_SECS)
-
-            if process.poll() is not None:
-                # Process terminated immediately, check error
-                stdout, stderr = process.communicate()
-                error_msg = stderr.decode() if stderr else "Unknown error"
-                logger.error(f"Player {name} failed to start: {error_msg}")
-
-                # Try with null device as fallback if original device failed
-                if player["device"] != "null":
-                    logger.info(f"Retrying player {name} with null device as fallback")
-
-                    # Update command to use null device
-                    fallback_cmd = cmd.copy()
-                    for i, arg in enumerate(fallback_cmd):
-                        if arg == "-o":
-                            fallback_cmd[i + 1] = "null"
-                            break
-
-                    # Add null device specific parameters
-                    if "-r" not in fallback_cmd:
-                        fallback_cmd.extend(["-r", "44100"])
-
-                    logger.info(f"Fallback command: {' '.join(fallback_cmd)}")
-
-                    try:
-                        process = subprocess.Popen(
-                            fallback_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid
-                        )
-
-                        self.processes[name] = process
-                        time.sleep(PROCESS_STARTUP_DELAY_SECS)
-
-                        if process.poll() is not None:
-                            stdout, stderr = process.communicate()
-                            error_msg = stderr.decode() if stderr else "Unknown error"
-                            return False, f"Player failed to start even with null device: {error_msg}"
-                        else:
-                            logger.info(f"Player {name} started successfully with null device fallback")
-                            return (
-                                True,
-                                f"Player {name} started with null device (audio device '{player['device']}' not available)",
-                            )
-
-                    except Exception as e:
-                        logger.error(f"Error starting player {name} with fallback: {e}")
-                        return False, f"Error starting player with fallback: {e}"
-                else:
-                    return False, f"Player failed to start: {error_msg}"
-
-            logger.info(f"Started player {name} with PID {process.pid}")
-            return True, f"Player {name} started successfully"
-
-        except FileNotFoundError:
-            logger.error("squeezelite binary not found")
-            return False, "squeezelite binary not found - container may not be built correctly"
-        except Exception as e:
-            logger.error(f"Error starting player {name}: {e}")
-            return False, f"Error starting player: {e}"
+        return success, message
 
     def stop_player(self, name: str) -> tuple[bool, str]:
         """
         Stop a squeezelite player process.
-
-        Sends SIGTERM to gracefully stop the process. If the process doesn't
-        terminate within PROCESS_STOP_TIMEOUT_SECS, sends SIGKILL.
 
         Args:
             name: Name of the player to stop.
 
         Returns:
             Tuple of (success: bool, message: str).
-
-        Side Effects:
-            - Removes process from self.processes dict
-            - Logs stop/error messages
         """
-        if name not in self.processes:
-            return False, "Player not running"
-
-        process = self.processes[name]
-        if process.poll() is not None:
-            # Process already terminated
-            del self.processes[name]
-            return False, "Player was not running"
-
-        try:
-            # Send SIGTERM to the process group
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-
-            # Wait for process to terminate
-            process.wait(timeout=PROCESS_STOP_TIMEOUT_SECS)
-            del self.processes[name]
-            logger.info(f"Stopped player {name}")
-            return True, f"Player {name} stopped successfully"
-
-        except subprocess.TimeoutExpired:
-            # Force kill if it doesn't respond to SIGTERM
-            try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                process.wait(timeout=PROCESS_KILL_TIMEOUT_SECS)
-            except Exception:
-                pass
-            del self.processes[name]
-            return True, f"Player {name} force stopped"
-        except Exception as e:
-            logger.error(f"Error stopping player {name}: {e}")
-            return False, f"Error stopping player: {e}"
+        return self.process.stop(name)
 
     def get_player_status(self, name: str) -> bool:
         """
         Get the running status of a player.
-
-        Checks if the player's subprocess is still running by polling its status.
 
         Args:
             name: Name of the player to check.
@@ -625,193 +471,59 @@ class SqueezeliteManager:
         Returns:
             True if the player process is running, False otherwise.
         """
-        if name not in self.processes:
-            return False
-
-        process = self.processes[name]
-        return process.poll() is None
+        return self.process.is_running(name)
 
     def get_all_statuses(self) -> dict[str, bool]:
         """
         Get running status of all configured players.
 
         Returns:
-            Dictionary mapping player names to their running status (True/False).
+            Dictionary mapping player names to their running status.
         """
-        statuses = {}
-        for name in self.players:
-            statuses[name] = self.get_player_status(name)
-        return statuses
+        return self.process.get_all_statuses(self.config.list_players())
 
     def get_mixer_controls(self, device: str) -> list[str]:
         """
         Get available ALSA mixer controls for a device.
 
-        Queries amixer for the list of simple controls available on the
-        specified sound card.
-
         Args:
             device: ALSA device identifier (e.g., 'hw:0,0').
 
         Returns:
-            List of control names (e.g., ['Master', 'PCM', 'Headphone']).
-            Returns DEFAULT_MIXER_CONTROLS for virtual devices.
+            List of control names.
         """
-        if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
-            # Return virtual controls for non-hardware devices
-            return DEFAULT_MIXER_CONTROLS.copy()
-
-        try:
-            # Extract card number from device ID
-            card_match = re.search(r"hw:([0-9]+)", device)
-            if not card_match:
-                return DEFAULT_MIXER_CONTROLS.copy()
-
-            card_num = card_match.group(1)
-            result = subprocess.run(["amixer", "-c", card_num, "scontrols"], capture_output=True, text=True, check=True)
-
-            controls = []
-            for line in result.stdout.split("\n"):
-                if "Simple mixer control" in line:
-                    # Extract control name from line like "Simple mixer control 'Master',0"
-                    match = re.search(r"'([^']+)'", line)
-                    if match:
-                        controls.append(match.group(1))
-
-            return controls if controls else DEFAULT_MIXER_CONTROLS.copy()
-
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            logger.warning(f"Could not get mixer controls for device {device}: {e}")
-            return DEFAULT_MIXER_CONTROLS.copy()
+        return self.audio.get_mixer_controls(device)
 
     def get_device_volume(self, device: str, control: str = "Master") -> int:
         """
         Get the current volume for an audio device.
 
-        Queries the ALSA mixer to read the current volume level. Tries multiple
-        control names (Master, PCM, etc.) until one works.
-
         Args:
-            device: ALSA device identifier (e.g., 'hw:0,0').
-            control: Preferred control name (default: 'Master').
+            device: ALSA device identifier.
+            control: Mixer control name.
 
         Returns:
             Volume level as integer percentage (0-100).
-            Returns DEFAULT_VOLUME_PERCENT for virtual devices or on error.
         """
-        if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
-            # Return default volume for virtual devices
-            logger.debug(f"Virtual device {device}, returning default volume")
-            return DEFAULT_VOLUME_PERCENT
-
-        try:
-            # Extract card number from device ID
-            card_match = re.search(r"hw:([0-9]+)", device)
-            if not card_match:
-                logger.debug(f"No card number found in device {device}, returning default volume")
-                return DEFAULT_VOLUME_PERCENT
-
-            card_num = card_match.group(1)
-
-            for control_name in VOLUME_READ_CONTROLS:
-                try:
-                    result = subprocess.run(
-                        ["amixer", "-c", card_num, "sget", control_name], capture_output=True, text=True, check=True
-                    )
-
-                    # Parse volume from output like "[75%]"
-                    volume_match = re.search(r"\[(\d+)%\]", result.stdout)
-                    if volume_match:
-                        volume = int(volume_match.group(1))
-                        logger.debug(f"Got volume {volume}% for device {device} control {control_name}")
-                        return volume
-                except subprocess.CalledProcessError:
-                    continue  # Try next control name
-
-            # If no controls worked, return default
-            logger.warning(f"Could not find working volume control for device {device}")
-            return DEFAULT_VOLUME_PERCENT
-
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"Could not get volume for device {device}: {e}")
-            return DEFAULT_VOLUME_PERCENT
+        return self.audio.get_volume(device, control)
 
     def set_device_volume(self, device: str, volume: int, control: str = "Master") -> tuple[bool, str]:
         """
         Set the volume for an audio device.
 
-        Uses amixer to set the volume level on the ALSA mixer. Tries multiple
-        control names (Master, PCM, etc.) until one works.
-
         Args:
-            device: ALSA device identifier (e.g., 'hw:0,0').
+            device: ALSA device identifier.
             volume: Volume level as integer percentage (0-100).
-            control: Preferred control name (default: 'Master').
+            control: Mixer control name.
 
         Returns:
             Tuple of (success: bool, message: str).
-
-        Side Effects:
-            - Changes hardware volume level if device supports it
-            - Logs volume changes and errors
         """
-        if not 0 <= volume <= 100:
-            return False, "Volume must be between 0 and 100"
-
-        if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
-            # For virtual devices, just store the volume setting
-            logger.info(f"Virtual device {device}, volume {volume}% stored (no hardware control)")
-            return True, f"Volume set to {volume}% (virtual device)"
-
-        try:
-            # Extract card number from device ID
-            card_match = re.search(r"hw:([0-9]+)", device)
-            if not card_match:
-                logger.debug(f"No card number found in device {device}, storing volume only")
-                return True, f"Volume set to {volume}% (no hardware control)"
-
-            card_num = card_match.group(1)
-
-            for control_name in VOLUME_WRITE_CONTROLS:
-                try:
-                    subprocess.run(
-                        ["amixer", "-c", card_num, "sset", control_name, f"{volume}%"],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    )
-
-                    logger.info(f"Set volume to {volume}% for device {device} control {control_name}")
-                    return True, f"Volume set to {volume}% ({control_name})"
-                except subprocess.CalledProcessError as e:
-                    logger.debug(f"Control {control_name} failed for device {device}: {e}")
-                    continue  # Try next control name
-
-            # If no controls worked
-            logger.warning(f"Could not find working volume control for device {device}")
-            return False, f"No working volume controls found for device {device}"
-
-        except subprocess.CalledProcessError as e:
-            # Handle both string and bytes stderr
-            if hasattr(e, "stderr") and e.stderr:
-                if isinstance(e.stderr, bytes):
-                    error_msg = e.stderr.decode()
-                else:
-                    error_msg = str(e.stderr)
-            else:
-                error_msg = str(e)
-            logger.warning(f"Could not set volume for device {device}: {error_msg}")
-            return False, f"Could not set volume: {error_msg}"
-        except FileNotFoundError:
-            logger.warning("amixer command not found")
-            return False, "Audio mixer control not available"
+        return self.audio.set_volume(device, volume, control)
 
     def get_player_volume(self, name: str) -> int | None:
         """
         Get the current volume for a player.
-
-        Retrieves the actual hardware volume for the player's audio device.
-        Updates stored volume in config if not previously set.
 
         Args:
             name: Name of the player.
@@ -819,19 +531,19 @@ class SqueezeliteManager:
         Returns:
             Volume level as integer percentage (0-100), or None if player not found.
         """
-        if name not in self.players:
+        player = self.config.get_player(name)
+        if not player:
             return None
 
-        player = self.players[name]
         device = player["device"]
 
-        # First try to get actual hardware volume
-        actual_volume = self.get_device_volume(device)
+        # Get actual hardware volume
+        actual_volume = self.audio.get_volume(device)
 
         # Update stored volume to match actual volume
         if "volume" not in player:
             player["volume"] = actual_volume
-            self.save_config()
+            self.config.save()
 
         return actual_volume
 
@@ -839,48 +551,60 @@ class SqueezeliteManager:
         """
         Set the volume for a player.
 
-        Sets the hardware volume for the player's audio device and stores the
-        volume setting in the player configuration.
-
         Args:
             name: Name of the player.
             volume: Volume level as integer percentage (0-100).
 
         Returns:
             Tuple of (success: bool, message: str).
-
-        Side Effects:
-            - Changes hardware volume if device supports it
-            - Updates and saves player volume in config file
         """
-        if name not in self.players:
+        player = self.config.get_player(name)
+        if not player:
             return False, "Player not found"
 
         if not 0 <= volume <= 100:
             return False, "Volume must be between 0 and 100"
 
-        player = self.players[name]
         device = player["device"]
 
         # Set the hardware volume
-        success, message = self.set_device_volume(device, volume)
+        success, message = self.audio.set_volume(device, volume)
 
         # Always update stored volume regardless of hardware control success
         player["volume"] = volume
-        self.save_config()
+        self.config.save()
 
         return success, message
 
 
-# Initialize the manager
+# =============================================================================
+# Initialize managers and the main SqueezeliteManager
+# =============================================================================
+
 try:
-    logger.info("Initializing Squeezelite Manager...")
-    manager = SqueezeliteManager()
-    logger.info("Squeezelite Manager initialized successfully")
+    logger.info("Initializing managers...")
+
+    config_manager = ConfigManager(CONFIG_FILE)
+    logger.info(f"ConfigManager initialized with {len(config_manager.players)} players")
+
+    audio_manager = AudioManager(windows_mode=WINDOWS_MODE)
+    logger.info("AudioManager initialized")
+
+    process_manager = ProcessManager(log_dir=LOG_DIR)
+    logger.info("ProcessManager initialized")
+
+    manager = SqueezeliteManager(config_manager, audio_manager, process_manager)
+    logger.info("SqueezeliteManager initialized successfully")
+
 except Exception as e:
-    logger.error(f"Failed to initialize Squeezelite Manager: {e}")
+    logger.error(f"Failed to initialize managers: {e}")
     traceback.print_exc()
     sys.exit(1)
+
+
+# =============================================================================
+# Flask Routes
+# =============================================================================
 
 
 @app.route("/")
@@ -1059,6 +783,11 @@ def debug_audio():
         return jsonify({"error": str(e)}), 500
 
 
+# =============================================================================
+# WebSocket handlers
+# =============================================================================
+
+
 @socketio.on("connect")
 def handle_connect():
     """Handle WebSocket connection"""
@@ -1087,6 +816,11 @@ try:
 except Exception as e:
     logger.error(f"Failed to start status monitoring thread: {e}")
     # Continue without status monitoring
+
+
+# =============================================================================
+# Main entry point
+# =============================================================================
 
 if __name__ == "__main__":
     try:

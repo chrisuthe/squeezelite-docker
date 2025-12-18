@@ -30,11 +30,11 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | All | MEDIUM | Add module-level docstring explaining file purpose |
 
 **Refactoring Needed:**
-- [ ] Split `SqueezeliteManager` into separate classes:
-  - `ConfigManager` - YAML load/save
-  - `ProcessManager` - subprocess handling
-  - `AudioDeviceManager` - device detection
-  - `VolumeManager` - amixer integration
+- [x] Split `SqueezeliteManager` into separate classes:
+  - `ConfigManager` - YAML load/save ✓
+  - `ProcessManager` - subprocess handling ✓
+  - `AudioManager` - device detection + volume control ✓
+  - (VolumeManager merged into AudioManager for cohesion)
 
 ---
 
@@ -124,7 +124,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | Type hints | ~~HIGH~~ | ~~No Python type annotations anywhere~~ Done for SqueezeliteManager class |
 | Configuration schema | HIGH | No formal schema for players.yaml validation |
 | Security docs | ~~HIGH~~ | ~~No documentation of hardcoded secrets or auth gaps~~ Secrets fixed; auth intentionally omitted |
-| Architecture docs | MEDIUM | No design decision documentation |
+| Architecture docs | ~~MEDIUM~~ | ~~No design decision documentation~~ Done - see docs/ARCHITECTURE.md |
 | API examples in code | MEDIUM | Code only uses docstrings, relies on swagger.yaml |
 
 ---
@@ -166,7 +166,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 
 ## Larger Refactors (4+ hours)
 
-1. [ ] Split SqueezeliteManager into focused classes
+1. [x] Split SqueezeliteManager into focused classes (see app/managers/)
 2. [ ] Add comprehensive unit test suite
 3. [x] ~~Add authentication/authorization system~~ Won't fix - local network app; trusted environment
 4. [x] Fix XSS vulnerabilities with proper template escaping
@@ -197,7 +197,7 @@ This document tracks files that need commenting, documentation, or code cleanup 
 1. ~~Add Python type hints~~ ✓ Done (SqueezeliteManager class fully typed)
 2. ~~Add module/function documentation~~ ✓ Done (comprehensive docstrings in app.py, app_enhanced.py, health_check.py)
 3. ~~Configure linting (flake8, pylint)~~ ✓ Done (Ruff configured with pyproject.toml + GitHub Actions workflow)
-4. Split SqueezeliteManager class
+4. ~~Split SqueezeliteManager class~~ ✓ Done (extracted to app/managers/)
 
 ### Phase 3: Testing
 1. Add unit tests for core functions
