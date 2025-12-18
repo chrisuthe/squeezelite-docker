@@ -143,13 +143,13 @@ This document tracks files that need commenting, documentation, or code cleanup 
 
 ## Quick Wins (Can Fix in < 30 minutes)
 
-1. [ ] Replace hardcoded `SECRET_KEY` with `os.environ.get('SECRET_KEY', 'fallback')`
-2. [ ] Replace hardcoded supervisor credentials with environment variables
-3. [ ] Add module-level docstrings to all Python files
-4. [ ] Document the magic mixer control array in app.py
-5. [ ] Update psutil to latest version
-6. [ ] Remove unused `requests` import/dependency
-7. [ ] Add constants for magic numbers (timeouts, intervals)
+1. [x] Replace hardcoded `SECRET_KEY` with `os.environ.get('SECRET_KEY', 'fallback')`
+2. [x] Replace hardcoded supervisor credentials with environment variables
+3. [x] Add module-level docstrings to all Python files
+4. [x] Document the magic mixer control array in app.py
+5. [x] ~~Update psutil to latest version~~ Removed (was unused)
+6. [x] Remove unused `requests` import/dependency
+7. [x] Add constants for magic numbers (timeouts, intervals)
 
 ---
 
@@ -169,8 +169,8 @@ This document tracks files that need commenting, documentation, or code cleanup 
 1. [ ] Split SqueezeliteManager into focused classes
 2. [ ] Add comprehensive unit test suite
 3. [ ] Add authentication/authorization system
-4. [ ] Fix XSS vulnerabilities with proper template escaping
-5. [ ] Add CI/CD pipeline with linting and tests
+4. [x] Fix XSS vulnerabilities with proper template escaping
+5. [x] Add CI/CD pipeline with linting and tests (GitHub Actions workflow added)
 
 ---
 

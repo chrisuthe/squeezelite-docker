@@ -17,9 +17,10 @@ State File Format (player_states.yaml):
     total_players: Total number of configured players
 
 Configuration:
-    - State freshness timeout: 5 minutes (states older than this are not restored)
-    - State save interval: 30 seconds
-    - Restore delay: 3 seconds after startup
+    - State freshness timeout: STATE_FRESHNESS_TIMEOUT_SECS (states older than this are not restored)
+    - State save interval: STATE_SAVE_INTERVAL_SECS
+    - Restore delay: STATE_RESTORE_DELAY_SECS after startup
+    See CONSTANTS section below for configurable values.
 
 Note:
     Use this version instead of app.py if you need players to survive container
@@ -41,6 +42,85 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from flask_socketio import SocketIO, emit
 from flask_swagger_ui import get_swaggerui_blueprint
 import logging
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ALSA Mixer Control Names
+# -----------------------------------------------------------------------------
+# These arrays define which ALSA mixer controls to check when reading/setting
+# volume. ALSA sound cards expose different controls depending on the hardware.
+# Common control names include:
+#   - Master: Main output volume (most common)
+#   - PCM: Digital audio volume
+#   - Speaker: Built-in speaker output
+#   - Headphone: Headphone jack output
+#   - Digital: Digital/SPDIF output
+#   - Capture: Input/recording level (read-only for our purposes)
+#
+# The code tries each control in order until one works.
+
+# Default fallback when no controls can be detected
+DEFAULT_MIXER_CONTROLS = ['Master', 'PCM']
+
+# Controls to try when reading volume (includes Capture for status reporting)
+VOLUME_READ_CONTROLS = ['Master', 'PCM', 'Speaker', 'Headphone', 'Digital', 'Capture']
+
+# Controls to try when setting volume (excludes Capture - it's for input levels)
+VOLUME_WRITE_CONTROLS = ['Master', 'PCM', 'Speaker', 'Headphone', 'Digital']
+
+# Virtual/software devices that don't support hardware volume control
+VIRTUAL_AUDIO_DEVICES = ['null', 'pulse', 'dmix', 'default']
+
+# -----------------------------------------------------------------------------
+# Timing Constants (in seconds)
+# -----------------------------------------------------------------------------
+
+# Delay after starting a process to check if it failed immediately
+PROCESS_STARTUP_DELAY_SECS = 0.5
+
+# Timeout when waiting for process to stop gracefully (SIGTERM)
+PROCESS_STOP_TIMEOUT_SECS = 5
+
+# Timeout when waiting for process to be killed forcefully (SIGKILL)
+PROCESS_KILL_TIMEOUT_SECS = 2
+
+# How often to poll player statuses and emit WebSocket updates
+STATUS_MONITOR_INTERVAL_SECS = 2
+
+# Delay before retrying after an error in status monitor loop
+STATUS_MONITOR_ERROR_DELAY_SECS = 5
+
+# -----------------------------------------------------------------------------
+# State Persistence Constants (Enhanced Version Only)
+# -----------------------------------------------------------------------------
+
+# Maximum age of saved state to consider valid for restore (in seconds)
+# States older than this are ignored on startup to prevent restoring stale data
+STATE_FRESHNESS_TIMEOUT_SECS = 300  # 5 minutes
+
+# How often to save current player state to disk (in seconds)
+STATE_SAVE_INTERVAL_SECS = 30
+
+# Delay after startup before attempting to restore previous state (in seconds)
+# Allows time for audio devices to be detected and system to stabilize
+STATE_RESTORE_DELAY_SECS = 3
+
+# Delay before retrying after an error in state saver loop (in seconds)
+STATE_SAVE_ERROR_DELAY_SECS = 60
+
+# -----------------------------------------------------------------------------
+# Default Values
+# -----------------------------------------------------------------------------
+
+# Default volume percentage for virtual devices or when detection fails
+DEFAULT_VOLUME_PERCENT = 75
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
 
 # Configure logging first
 logging.basicConfig(
@@ -165,15 +245,15 @@ class SqueezeliteManager:
                 with open(STATE_FILE, 'r') as f:
                     state_data = yaml.safe_load(f) or {}
                     
-                # Only restore if the state file is recent (less than 5 minutes old)
+                # Only restore if the state file is recent
                 # This prevents restoring stale state from old shutdowns
                 state_timestamp = state_data.get('timestamp')
                 if state_timestamp:
                     try:
                         last_update = datetime.fromisoformat(state_timestamp)
                         time_diff = datetime.now() - last_update
-                        if time_diff.total_seconds() > 300:  # 5 minutes
-                            logger.info("State file is older than 5 minutes, not restoring player states")
+                        if time_diff.total_seconds() > STATE_FRESHNESS_TIMEOUT_SECS:
+                            logger.info(f"State file is older than {STATE_FRESHNESS_TIMEOUT_SECS}s, not restoring player states")
                             return
                     except (ValueError, TypeError) as e:
                         logger.warning(f"Invalid timestamp in state file: {e}")
@@ -219,7 +299,7 @@ class SqueezeliteManager:
     def _restore_player_states(self, running_players):
         """NEW: Restore player states in background thread"""
         # Wait a moment for the system to fully initialize
-        time.sleep(3)
+        time.sleep(STATE_RESTORE_DELAY_SECS)
         
         restored_count = 0
         failed_count = 0
@@ -256,11 +336,11 @@ class SqueezeliteManager:
         """NEW: Periodically save state (called by background thread)"""
         while True:
             try:
-                time.sleep(30)  # Save state every 30 seconds
+                time.sleep(STATE_SAVE_INTERVAL_SECS)
                 self.save_state()
             except Exception as e:
                 logger.error(f"Error in periodic state save: {e}")
-                time.sleep(60)  # Wait longer on error
+                time.sleep(STATE_SAVE_ERROR_DELAY_SECS)
     
     def get_audio_devices(self):
         """Get list of available audio devices"""
@@ -470,8 +550,7 @@ class SqueezeliteManager:
             self.processes[name] = process
             
             # Give the process a moment to start and check if it fails immediately
-            import time
-            time.sleep(0.5)
+            time.sleep(PROCESS_STARTUP_DELAY_SECS)
             
             if process.poll() is not None:
                 # Process terminated immediately, check error
@@ -505,8 +584,8 @@ class SqueezeliteManager:
                         )
                         
                         self.processes[name] = process
-                        time.sleep(0.5)
-                        
+                        time.sleep(PROCESS_STARTUP_DELAY_SECS)
+
                         if process.poll() is not None:
                             stdout, stderr = process.communicate()
                             error_msg = stderr.decode() if stderr else "Unknown error"
@@ -550,7 +629,7 @@ class SqueezeliteManager:
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
             
             # Wait for process to terminate
-            process.wait(timeout=5)
+            process.wait(timeout=PROCESS_STOP_TIMEOUT_SECS)
             del self.processes[name]
             logger.info(f"Stopped player {name}")
             self.save_state()  # NEW: Save state when player stops
@@ -560,7 +639,7 @@ class SqueezeliteManager:
             # Force kill if it doesn't respond to SIGTERM
             try:
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                process.wait(timeout=2)
+                process.wait(timeout=PROCESS_KILL_TIMEOUT_SECS)
             except:
                 pass
             del self.processes[name]
@@ -618,20 +697,20 @@ class SqueezeliteManager:
 
     def get_mixer_controls(self, device):
         """Get available mixer controls for a device"""
-        if WINDOWS_MODE or device in ['null', 'pulse', 'dmix', 'default']:
+        if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
             # Return virtual controls for non-hardware devices
-            return ['Master', 'PCM']
-        
+            return DEFAULT_MIXER_CONTROLS.copy()
+
         try:
             # Extract card number from device ID
             card_match = re.search(r'hw:([0-9]+)', device)
             if not card_match:
-                return ['Master', 'PCM']
-            
+                return DEFAULT_MIXER_CONTROLS.copy()
+
             card_num = card_match.group(1)
-            result = subprocess.run(['amixer', '-c', card_num, 'scontrols'], 
+            result = subprocess.run(['amixer', '-c', card_num, 'scontrols'],
                                   capture_output=True, text=True, check=True)
-            
+
             controls = []
             for line in result.stdout.split('\n'):
                 if "Simple mixer control" in line:
@@ -639,37 +718,34 @@ class SqueezeliteManager:
                     match = re.search(r"'([^']+)'", line)
                     if match:
                         controls.append(match.group(1))
-            
-            return controls if controls else ['Master', 'PCM']
-            
+
+            return controls if controls else DEFAULT_MIXER_CONTROLS.copy()
+
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             logger.warning(f"Could not get mixer controls for device {device}: {e}")
-            return ['Master', 'PCM']
+            return DEFAULT_MIXER_CONTROLS.copy()
     
     def get_device_volume(self, device, control='Master'):
         """Get the current volume for a device"""
-        if WINDOWS_MODE or device in ['null', 'pulse', 'dmix', 'default']:
+        if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
             # Return default volume for virtual devices
             logger.debug(f"Virtual device {device}, returning default volume")
-            return 75
-        
+            return DEFAULT_VOLUME_PERCENT
+
         try:
             # Extract card number from device ID
             card_match = re.search(r'hw:([0-9]+)', device)
             if not card_match:
                 logger.debug(f"No card number found in device {device}, returning default volume")
-                return 75
-            
+                return DEFAULT_VOLUME_PERCENT
+
             card_num = card_match.group(1)
-            
-            # Try multiple common control names
-            control_names = ['Master', 'PCM', 'Speaker', 'Headphone', 'Digital', 'Capture']
-            
-            for control_name in control_names:
+
+            for control_name in VOLUME_READ_CONTROLS:
                 try:
-                    result = subprocess.run(['amixer', '-c', card_num, 'sget', control_name], 
+                    result = subprocess.run(['amixer', '-c', card_num, 'sget', control_name],
                                           capture_output=True, text=True, check=True)
-                    
+
                     # Parse volume from output like "[75%]"
                     volume_match = re.search(r'\[(\d+)%\]', result.stdout)
                     if volume_match:
@@ -678,38 +754,35 @@ class SqueezeliteManager:
                         return volume
                 except subprocess.CalledProcessError:
                     continue  # Try next control name
-            
+
             # If no controls worked, return default
             logger.warning(f"Could not find working volume control for device {device}")
-            return 75
-                
+            return DEFAULT_VOLUME_PERCENT
+
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
             logger.warning(f"Could not get volume for device {device}: {e}")
-            return 75
+            return DEFAULT_VOLUME_PERCENT
     
     def set_device_volume(self, device, volume, control='Master'):
         """Set the volume for a device"""
         if not 0 <= volume <= 100:
             return False, "Volume must be between 0 and 100"
-        
-        if WINDOWS_MODE or device in ['null', 'pulse', 'dmix', 'default']:
+
+        if WINDOWS_MODE or device in VIRTUAL_AUDIO_DEVICES:
             # For virtual devices, just store the volume setting
             logger.info(f"Virtual device {device}, volume {volume}% stored (no hardware control)")
             return True, f"Volume set to {volume}% (virtual device)"
-        
+
         try:
             # Extract card number from device ID
             card_match = re.search(r'hw:([0-9]+)', device)
             if not card_match:
                 logger.debug(f"No card number found in device {device}, storing volume only")
                 return True, f"Volume set to {volume}% (no hardware control)"
-            
+
             card_num = card_match.group(1)
-            
-            # Try multiple common control names
-            control_names = ['Master', 'PCM', 'Speaker', 'Headphone', 'Digital']
-            
-            for control_name in control_names:
+
+            for control_name in VOLUME_WRITE_CONTROLS:
                 try:
                     result = subprocess.run(['amixer', '-c', card_num, 'sset', control_name, f'{volume}%'], 
                                           capture_output=True, text=True, check=True)
@@ -1005,10 +1078,10 @@ def status_monitor():
         try:
             statuses = manager.get_all_statuses()
             socketio.emit('status_update', statuses)
-            time.sleep(2)
+            time.sleep(STATUS_MONITOR_INTERVAL_SECS)
         except Exception as e:
             logger.error(f"Error in status monitor: {e}")
-            time.sleep(5)
+            time.sleep(STATUS_MONITOR_ERROR_DELAY_SECS)
 
 # Start status monitoring thread
 try:
