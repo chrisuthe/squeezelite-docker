@@ -6,7 +6,9 @@
       "Bash(pushd:*)",
       "Bash(popd)",
       "Bash(ruff format:*)",
-      "Bash(python -m ruff:*)"
+      "Bash(python -m ruff:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)"
     ]
   }
 }

@@ -643,6 +643,8 @@ def get_devices():
 @app.route("/api/devices/portaudio", methods=["GET"])
 def get_portaudio_devices():
     """API endpoint to get PortAudio devices (for Sendspin)"""
+    import re
+
     try:
         result = subprocess.run(
             ["sendspin", "--list-audio-devices"],
@@ -650,19 +652,23 @@ def get_portaudio_devices():
             text=True,
             timeout=10,
         )
-        # Parse the output - sendspin lists devices with index and name
+        # Parse the output - sendspin lists devices as "[0] Device Name"
+        # Only include lines that match the device format
         devices = []
         for line in result.stdout.strip().split("\n"):
             line = line.strip()
-            if line and not line.startswith("Available"):
-                # Lines are typically like "0: Device Name" or just device info
-                devices.append({"raw": line})
+            # Match lines like "[0] HDA NVidia: HDMI 0 (hw:1,3) (default)"
+            match = re.match(r"^\[(\d+)\]\s*(.+)$", line)
+            if match:
+                index = match.group(1)
+                name = match.group(2)
+                devices.append({"index": index, "name": name, "raw": line})
         return jsonify(
             {
                 "success": True,
                 "devices": devices,
                 "raw_output": result.stdout,
-                "note": "Use device index (0, 1, 2) or name prefix with --audio-device for sendspin",
+                "note": "Use device index (0, 1, 2) with --audio-device for sendspin",
             }
         )
     except FileNotFoundError:
