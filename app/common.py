@@ -366,22 +366,28 @@ def register_routes(app, manager):
             if hasattr(manager, "get_now_playing"):
                 metadata = manager.get_now_playing(name)
                 if metadata is None:
-                    return jsonify({
+                    return jsonify(
+                        {
+                            "success": True,
+                            "available": False,
+                            "message": "Now playing not available for this player",
+                        }
+                    )
+                return jsonify(
+                    {
+                        "success": True,
+                        "available": True,
+                        "metadata": metadata.to_dict() if hasattr(metadata, "to_dict") else metadata,
+                    }
+                )
+            else:
+                return jsonify(
+                    {
                         "success": True,
                         "available": False,
-                        "message": "Now playing not available for this player",
-                    })
-                return jsonify({
-                    "success": True,
-                    "available": True,
-                    "metadata": metadata.to_dict() if hasattr(metadata, "to_dict") else metadata,
-                })
-            else:
-                return jsonify({
-                    "success": True,
-                    "available": False,
-                    "message": "Now playing not supported by this manager",
-                })
+                        "message": "Now playing not supported by this manager",
+                    }
+                )
         except Exception as e:
             logger.error(f"Error in get_player_nowplaying for {name}: {e}")
             return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500

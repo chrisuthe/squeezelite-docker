@@ -290,9 +290,7 @@ class SendspinMetadataClient:
                 updated_at=time.time(),
             )
 
-        logger.debug(
-            f"Metadata updated: {self._metadata.artist} - {self._metadata.title}"
-        )
+        logger.debug(f"Metadata updated: {self._metadata.artist} - {self._metadata.title}")
 
 
 # =============================================================================
@@ -313,9 +311,7 @@ class MetadataClientManager:
         self._clients: dict[str, SendspinMetadataClient] = {}
         self._lock = threading.Lock()
 
-    def get_or_create_client(
-        self, player_name: str, server_url: str
-    ) -> SendspinMetadataClient | None:
+    def get_or_create_client(self, player_name: str, server_url: str) -> SendspinMetadataClient | None:
         """
         Get existing client or create new one for a player.
 
