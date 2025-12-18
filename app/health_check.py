@@ -6,7 +6,7 @@ Validates that the Squeezelite Multi-Room container is properly configured
 and ready to run. Executed during container startup by entrypoint.sh.
 
 Tests Performed:
-    1. Python Imports: Verifies Flask, SocketIO, PyYAML, psutil are available
+    1. Python Imports: Verifies Flask, SocketIO, PyYAML are available
     2. Directory Access: Checks /app/config, /app/logs, /app/data are writable
     3. Flask App: Tests basic Flask initialization and routing
     4. Audio Commands: Verifies squeezelite binary exists and responds
@@ -51,13 +51,6 @@ def test_imports():
         print("✓ PyYAML")
     except ImportError as e:
         print(f"✗ PyYAML import failed: {e}")
-        return False
-    
-    try:
-        import psutil
-        print(f"✓ psutil {psutil.__version__}")
-    except ImportError as e:
-        print(f"✗ psutil import failed: {e}")
         return False
     
     return True

@@ -29,7 +29,6 @@ import json
 import subprocess
 import signal
 import yaml
-import psutil
 import traceback
 import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory

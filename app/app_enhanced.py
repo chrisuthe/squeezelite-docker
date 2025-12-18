@@ -32,7 +32,6 @@ import json
 import subprocess
 import signal
 import yaml
-import psutil
 import traceback
 import re
 import threading

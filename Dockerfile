@@ -30,11 +30,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Python environment
     python3 \
     python3-pip \
-    python3-dev \
     supervisor \
     dos2unix \
-    # Build dependencies (needed for psutil on ARM64)
-    gcc \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
