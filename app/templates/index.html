@@ -279,10 +279,80 @@
         function toggleProviderFields(formPrefix) {
             const providerSelect = document.getElementById(formPrefix === 'edit' ? 'editPlayerProvider' : 'playerProvider');
             const serverIPGroup = document.getElementById(formPrefix === 'edit' ? 'editServerIPGroup' : 'addServerIPGroup');
+            const deviceSelect = document.getElementById(formPrefix === 'edit' ? 'editAudioDevice' : 'audioDevice');
 
             if (providerSelect && serverIPGroup) {
                 const isSqueezelite = providerSelect.value === 'squeezelite';
                 serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
+            }
+
+            // Update device list based on provider
+            if (providerSelect && deviceSelect) {
+                const currentDevice = deviceSelect.value;
+                loadDevicesForProvider(providerSelect.value, deviceSelect, currentDevice);
+            }
+        }
+
+        // Load devices based on provider type
+        async function loadDevicesForProvider(provider, deviceSelect, preserveValue = '') {
+            const isSendspin = provider === 'sendspin';
+            const endpoint = isSendspin ? '/api/devices/portaudio' : '/api/devices';
+
+            try {
+                const response = await fetch(endpoint);
+                const result = await response.json();
+
+                deviceSelect.innerHTML = '<option value="">Select an audio device...</option>';
+
+                if (isSendspin) {
+                    // PortAudio devices for Sendspin
+                    if (result.success && result.devices) {
+                        result.devices.forEach(device => {
+                            const option = document.createElement('option');
+                            // Parse the raw output to extract index and name
+                            // Format is typically "0: Device Name" or similar
+                            const raw = device.raw || '';
+                            const match = raw.match(/^(\d+):\s*(.+)$/);
+                            if (match) {
+                                option.value = match[1]; // Use index as value
+                                option.textContent = `${match[1]}: ${match[2]}`; // Show "0: Device Name"
+                            } else {
+                                // Fallback if format doesn't match
+                                option.value = raw;
+                                option.textContent = raw;
+                            }
+                            deviceSelect.appendChild(option);
+                        });
+                    }
+                    // Add a note about PortAudio
+                    const noteOption = document.createElement('option');
+                    noteOption.disabled = true;
+                    noteOption.textContent = '--- PortAudio devices (use index number) ---';
+                    deviceSelect.insertBefore(noteOption, deviceSelect.options[1]);
+                } else {
+                    // ALSA devices for Squeezelite
+                    if (result.devices) {
+                        result.devices.forEach(device => {
+                            const option = document.createElement('option');
+                            option.value = device.id;
+                            option.textContent = device.name;
+                            deviceSelect.appendChild(option);
+                        });
+                    }
+                }
+
+                // Try to restore previous selection if it exists in new list
+                if (preserveValue) {
+                    for (let i = 0; i < deviceSelect.options.length; i++) {
+                        if (deviceSelect.options[i].value === preserveValue) {
+                            deviceSelect.value = preserveValue;
+                            break;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+                deviceSelect.innerHTML = '<option value="">Error loading devices</option>';
             }
         }
 
@@ -435,59 +505,41 @@
             }
         }
         
-        function editPlayer(playerName) {
-            // Get current player data
-            fetch(`/api/players`)
-                .then(response => response.json())
-                .then(data => {
-                    const player = data.players[playerName];
-                    if (!player) {
-                        showAlert('Player not found', 'danger');
-                        return;
-                    }
+        async function editPlayer(playerName) {
+            try {
+                // Get current player data
+                const playersResponse = await fetch(`/api/players`);
+                const playersData = await playersResponse.json();
+                const player = playersData.players[playerName];
 
-                    // Populate the edit form
-                    document.getElementById('editOriginalName').value = playerName;
-                    document.getElementById('editPlayerName').value = player.name;
-                    document.getElementById('editPlayerProvider').value = player.provider || 'squeezelite';
-                    document.getElementById('editServerIP').value = player.server_ip || '';
-                    document.getElementById('editMacAddress').value = player.mac_address;
+                if (!player) {
+                    showAlert('Player not found', 'danger');
+                    return;
+                }
 
-                    // Toggle provider-specific fields
-                    toggleProviderFields('edit');
+                // Populate the edit form
+                document.getElementById('editOriginalName').value = playerName;
+                document.getElementById('editPlayerName').value = player.name;
+                document.getElementById('editPlayerProvider').value = player.provider || 'squeezelite';
+                document.getElementById('editServerIP').value = player.server_ip || '';
+                document.getElementById('editMacAddress').value = player.mac_address;
 
-                    // Load devices and set current device
-                    return fetch('/api/devices');
-                })
-                .then(response => response.json())
-                .then(data => {
-                    const deviceSelect = document.getElementById('editAudioDevice');
-                    deviceSelect.innerHTML = '<option value="">Select an audio device...</option>';
-                    
-                    data.devices.forEach(device => {
-                        const option = document.createElement('option');
-                        option.value = device.id;
-                        option.textContent = device.name;
-                        deviceSelect.appendChild(option);
-                    });
-                    
-                    // Set the current device
-                    fetch(`/api/players`)
-                        .then(response => response.json())
-                        .then(playerData => {
-                            const currentPlayer = playerData.players[playerName];
-                            if (currentPlayer) {
-                                deviceSelect.value = currentPlayer.device;
-                            }
-                        });
-                    
-                    // Show the modal
-                    new bootstrap.Modal(document.getElementById('editPlayerModal')).show();
-                })
-                .catch(error => {
-                    console.error('Error loading player data:', error);
-                    showAlert('Error loading player data: ' + error.message, 'danger');
-                });
+                // Toggle provider-specific fields (this also loads devices)
+                const providerSelect = document.getElementById('editPlayerProvider');
+                const serverIPGroup = document.getElementById('editServerIPGroup');
+                const isSqueezelite = providerSelect.value === 'squeezelite';
+                serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
+
+                // Load devices for the player's provider and set current device
+                const deviceSelect = document.getElementById('editAudioDevice');
+                await loadDevicesForProvider(player.provider || 'squeezelite', deviceSelect, player.device);
+
+                // Show the modal
+                new bootstrap.Modal(document.getElementById('editPlayerModal')).show();
+            } catch (error) {
+                console.error('Error loading player data:', error);
+                showAlert('Error loading player data: ' + error.message, 'danger');
+            }
         }
         
         function refreshStatus() {
@@ -654,48 +706,29 @@
         
         // Auto-refresh device list when edit modal opens
         document.getElementById('editPlayerModal').addEventListener('show.bs.modal', async function() {
-            try {
-                const response = await fetch('/api/devices');
-                const result = await response.json();
-                
-                const deviceSelect = document.getElementById('editAudioDevice');
-                const currentValue = deviceSelect.value; // Preserve current selection
-                deviceSelect.innerHTML = '<option value="">Select an audio device...</option>';
-                
-                result.devices.forEach(device => {
-                    const option = document.createElement('option');
-                    option.value = device.id;
-                    option.textContent = device.name;
-                    deviceSelect.appendChild(option);
-                });
-                
-                // Restore the current selection
-                if (currentValue) {
-                    deviceSelect.value = currentValue;
-                }
-            } catch (error) {
-                console.error('Error loading devices:', error);
+            // Device loading is handled by editPlayer() function
+            // This handler just ensures provider fields are in sync
+            const providerSelect = document.getElementById('editPlayerProvider');
+            const serverIPGroup = document.getElementById('editServerIPGroup');
+            if (providerSelect && serverIPGroup) {
+                const isSqueezelite = providerSelect.value === 'squeezelite';
+                serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
             }
         });
-        
-        // Auto-refresh device list when modal opens
+
+        // Auto-refresh device list when add modal opens
         document.getElementById('addPlayerModal').addEventListener('show.bs.modal', async function() {
-            try {
-                const response = await fetch('/api/devices');
-                const result = await response.json();
-                
-                const deviceSelect = document.getElementById('audioDevice');
-                deviceSelect.innerHTML = '<option value="">Select an audio device...</option>';
-                
-                result.devices.forEach(device => {
-                    const option = document.createElement('option');
-                    option.value = device.id;
-                    option.textContent = device.name;
-                    deviceSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Error loading devices:', error);
-            }
+            // Reset form to defaults
+            const providerSelect = document.getElementById('playerProvider');
+            const deviceSelect = document.getElementById('audioDevice');
+            const serverIPGroup = document.getElementById('addServerIPGroup');
+
+            // Default to squeezelite provider
+            providerSelect.value = 'squeezelite';
+            serverIPGroup.style.display = 'block';
+
+            // Load ALSA devices by default (for squeezelite)
+            await loadDevicesForProvider('squeezelite', deviceSelect);
         });
     </script>
 </body>
