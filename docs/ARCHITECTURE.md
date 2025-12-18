@@ -21,21 +21,30 @@ This document describes the architecture for supporting multiple audio player pr
 
 ## Current State
 
-The application currently has a monolithic `SqueezeliteManager` class (~800 lines) that handles:
+> **Note**: Phases 1 and 2 are now complete. The architecture described below has been implemented.
 
-- Configuration persistence (YAML load/save)
-- Process management (subprocess start/stop/status)
-- Audio device detection (aplay parsing)
-- Volume control (amixer commands)
-- Player CRUD operations
-- Squeezelite-specific command building
+The application now uses a modular architecture with focused manager classes and a provider abstraction:
 
-### Problems with Current Design
+**Manager Classes** (`app/managers/`):
+- `ConfigManager`: Configuration persistence (YAML load/save)
+- `AudioManager`: Device detection and volume control (aplay/amixer)
+- `ProcessManager`: Subprocess lifecycle (start/stop/status)
 
-1. **Single Responsibility Violation**: One class does too many things
-2. **Not Extensible**: Adding a new player type requires modifying the core class
-3. **Hard to Test**: Tightly coupled components make unit testing difficult
-4. **Squeezelite-Specific**: Logic is hardcoded for one player type
+**Provider Classes** (`app/providers/`):
+- `PlayerProvider`: Abstract base class for audio backends
+- `SqueezeliteProvider`: Logitech Media Server player
+- `SendspinProvider`: Music Assistant synchronized audio
+- `ProviderRegistry`: Provider discovery and lookup
+
+**Main Controller** (`app/app.py`):
+- `PlayerManager`: Coordinates managers and providers for player CRUD operations
+
+### Previous Problems (Now Resolved)
+
+1. ~~**Single Responsibility Violation**~~: Each manager/provider has one job
+2. ~~**Not Extensible**~~: New providers just implement the `PlayerProvider` interface
+3. ~~**Hard to Test**~~: Components can be unit tested in isolation
+4. ~~**Squeezelite-Specific**~~: Provider abstraction supports multiple backends
 
 ---
 
@@ -581,28 +590,30 @@ class SnapcastVolumeBackend(VolumeBackend):
 
 ## Migration Plan
 
-### Phase 1: Extract Helper Classes (Non-Breaking)
+### Phase 1: Extract Helper Classes (Non-Breaking) ✅ COMPLETE
 
-1. Create `app/managers/` directory
-2. Extract `ConfigManager` from `SqueezeliteManager`
-3. Extract `AudioManager` from `SqueezeliteManager`
-4. Extract `ProcessManager` from `SqueezeliteManager`
-5. Refactor `SqueezeliteManager` to use these classes
+1. ✅ Create `app/managers/` directory
+2. ✅ Extract `ConfigManager` from `SqueezeliteManager`
+3. ✅ Extract `AudioManager` from `SqueezeliteManager`
+4. ✅ Extract `ProcessManager` from `SqueezeliteManager`
+5. ✅ Refactor `SqueezeliteManager` to use these classes
 6. **All existing functionality preserved**
 
-### Phase 2: Add Provider Abstraction
+### Phase 2: Add Provider Abstraction ✅ COMPLETE
 
-1. Create `app/providers/` directory
-2. Create `PlayerProvider` abstract base class
-3. Create `SqueezeliteProvider` implementing current behavior
-4. Create `ProviderRegistry`
-5. Update `PlayerManager` to use providers
-6. **Still backward compatible** (only squeezelite provider exists)
+1. ✅ Create `app/providers/` directory
+2. ✅ Create `PlayerProvider` abstract base class
+3. ✅ Create `SqueezeliteProvider` implementing current behavior
+4. ✅ Create `SendspinProvider` for Music Assistant integration
+5. ✅ Create `ProviderRegistry`
+6. ✅ Rename `SqueezeliteManager` to `PlayerManager` and update to use providers
+7. ✅ Add `GET /api/providers` endpoint
+8. **Backward compatible** - existing configs work, default provider is squeezelite
 
 ### Phase 3: Add Snapcast Support
 
 1. Create `SnapcastProvider`
-2. Create `SnapcastVolumeBackend`
+2. Implement Snapcast volume control via JSON-RPC API (port 1780)
 3. Update config schema to v2
 4. Add config migration
 5. Update UI to show provider selection

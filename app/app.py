@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """
-Squeezelite Multi-Room Controller - Main Application
+Multi-Room Audio Controller - Main Application
 
-A Flask-based web application for managing multiple Squeezelite audio players.
-Provides a REST API and web interface for creating, configuring, and controlling
-audio players across different rooms/zones.
+A Flask-based web application for managing multiple audio players with
+support for different backends (Squeezelite, Sendspin, and more).
+Provides a REST API and web interface for creating, configuring, and
+controlling audio players across different rooms/zones.
 
 Key Components:
-    - SqueezeliteManager: Coordinates player lifecycle using focused manager classes
+    - PlayerManager: Coordinates player lifecycle using focused manager classes
     - ConfigManager: Handles configuration persistence
     - AudioManager: Handles device detection and volume control
     - ProcessManager: Handles subprocess lifecycle
+    - ProviderRegistry: Manages player provider implementations
+    - PlayerProvider: Abstract interface for audio backends
     - REST API: Endpoints for player CRUD operations, status, and volume control
     - WebSocket: Real-time status updates to connected browsers
     - Swagger UI: Interactive API documentation at /api/docs
+
+Supported Providers:
+    - Squeezelite: Logitech Media Server compatible player
+    - Sendspin: Music Assistant synchronized audio protocol
 
 Configuration:
     - Players stored in /app/config/players.yaml
@@ -25,7 +32,6 @@ Usage:
     Via supervisor: supervisord -c /etc/supervisor/conf.d/supervisord.conf
 """
 
-import hashlib
 import logging
 import os
 import subprocess
@@ -39,6 +45,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_socketio import SocketIO, emit
 from flask_swagger_ui import get_swaggerui_blueprint
 from managers import AudioManager, ConfigManager, ProcessManager
+from providers import ProviderRegistry, SendspinProvider, SqueezeliteProvider
 
 # =============================================================================
 # CONSTANTS
@@ -143,22 +150,25 @@ os.makedirs(PLAYERS_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
-class SqueezeliteManager:
+class PlayerManager:
     """
-    Manages Squeezelite audio player instances.
+    Manages multi-provider audio player instances.
 
-    Coordinates player lifecycle using focused manager classes:
+    Coordinates player lifecycle using focused manager classes and
+    provider abstraction for different audio backends:
     - ConfigManager: Configuration persistence
     - AudioManager: Device detection and volume control
     - ProcessManager: Subprocess lifecycle
+    - ProviderRegistry: Provider implementations (Squeezelite, Sendspin, etc.)
 
-    This class handles Squeezelite-specific logic like command building
-    and player CRUD operations that span multiple concerns.
+    This class handles provider-agnostic player CRUD operations and
+    delegates provider-specific logic to the appropriate provider.
 
     Attributes:
         config: ConfigManager instance for player configuration.
         audio: AudioManager instance for device/volume operations.
         process: ProcessManager instance for subprocess handling.
+        providers: ProviderRegistry for provider lookup.
     """
 
     # Type alias for player configuration
@@ -169,18 +179,21 @@ class SqueezeliteManager:
         config_manager: ConfigManager,
         audio_manager: AudioManager,
         process_manager: ProcessManager,
+        provider_registry: ProviderRegistry,
     ) -> None:
         """
-        Initialize the SqueezeliteManager.
+        Initialize the PlayerManager.
 
         Args:
             config_manager: ConfigManager instance for configuration.
             audio_manager: AudioManager instance for audio operations.
             process_manager: ProcessManager instance for process handling.
+            provider_registry: ProviderRegistry for provider lookup.
         """
         self.config = config_manager
         self.audio = audio_manager
         self.process = process_manager
+        self.providers = provider_registry
 
     @property
     def players(self) -> dict[str, PlayerConfig]:
@@ -203,17 +216,23 @@ class SqueezeliteManager:
         self,
         name: str,
         device: str,
+        provider_type: str = "squeezelite",
         server_ip: str = "",
+        server_url: str = "",
         mac_address: str = "",
+        **extra_config: Any,
     ) -> tuple[bool, str]:
         """
-        Create a new squeezelite player.
+        Create a new audio player.
 
         Args:
             name: Unique name for the player (used as identifier).
-            device: ALSA device ID (e.g., 'hw:0,0', 'null').
-            server_ip: Optional Logitech Media Server IP address.
-            mac_address: Optional MAC address. If empty, one is auto-generated.
+            device: Audio device ID (e.g., 'hw:0,0', 'null', 'default').
+            provider_type: Provider type ('squeezelite', 'sendspin').
+            server_ip: Optional server IP (for Squeezelite/LMS).
+            server_url: Optional WebSocket URL (for Sendspin).
+            mac_address: Optional MAC address (auto-generated if empty).
+            **extra_config: Additional provider-specific configuration.
 
         Returns:
             Tuple of (success: bool, message: str).
@@ -221,20 +240,31 @@ class SqueezeliteManager:
         if self.config.player_exists(name):
             return False, "Player with this name already exists"
 
-        if not mac_address:
-            # Generate a MAC address based on the player name
-            hash_obj = hashlib.md5(name.encode())
-            mac_hex = hash_obj.hexdigest()[:12]
-            mac_address = ":".join([mac_hex[i : i + 2] for i in range(0, 12, 2)])
+        # Get the provider
+        provider = self.providers.get(provider_type)
+        if provider is None:
+            return False, f"Unknown provider type: {provider_type}"
 
-        player_config: SqueezeliteManager.PlayerConfig = {
+        # Build initial config
+        player_config: PlayerManager.PlayerConfig = {
             "name": name,
             "device": device,
+            "provider": provider_type,
             "server_ip": server_ip,
+            "server_url": server_url,
             "mac_address": mac_address,
             "enabled": True,
             "volume": 75,
+            **extra_config,
         }
+
+        # Validate config with provider
+        is_valid, error = provider.validate_config(player_config)
+        if not is_valid:
+            return False, error
+
+        # Let provider prepare config (generate MAC, client_id, etc.)
+        player_config = provider.prepare_config(player_config)
 
         self.config.set_player(name, player_config)
         self.config.save()
@@ -245,18 +275,24 @@ class SqueezeliteManager:
         old_name: str,
         new_name: str,
         device: str,
+        provider_type: str | None = None,
         server_ip: str = "",
+        server_url: str = "",
         mac_address: str = "",
+        **extra_config: Any,
     ) -> tuple[bool, str]:
         """
-        Update an existing squeezelite player.
+        Update an existing audio player.
 
         Args:
             old_name: Current name of the player to update.
             new_name: New name for the player (can be same as old_name).
-            device: ALSA device ID (e.g., 'hw:0,0', 'null').
-            server_ip: Optional Logitech Media Server IP address.
+            device: Audio device ID (e.g., 'hw:0,0', 'null', 'default').
+            provider_type: Provider type (if changing providers).
+            server_ip: Optional server IP (for Squeezelite/LMS).
+            server_url: Optional WebSocket URL (for Sendspin).
             mac_address: Optional new MAC address.
+            **extra_config: Additional provider-specific configuration.
 
         Returns:
             Tuple of (success: bool, message: str).
@@ -280,8 +316,24 @@ class SqueezeliteManager:
         player_config["name"] = new_name
         player_config["device"] = device
         player_config["server_ip"] = server_ip
+        player_config["server_url"] = server_url
         if mac_address:
             player_config["mac_address"] = mac_address
+
+        # Update provider if specified
+        if provider_type:
+            player_config["provider"] = provider_type
+
+        # Merge extra config
+        player_config.update(extra_config)
+
+        # Get provider and validate
+        provider = self.providers.get_for_player(player_config)
+        if provider:
+            is_valid, error = provider.validate_config(player_config)
+            if not is_valid:
+                return False, error
+            player_config = provider.prepare_config(player_config)
 
         # If name changed, rename in config
         if old_name != new_name:
@@ -324,100 +376,12 @@ class SqueezeliteManager:
         self.config.save()
         return True, "Player deleted successfully"
 
-    def _build_squeezelite_command(self, player: PlayerConfig) -> list[str]:
-        """
-        Build the squeezelite command for a player.
-
-        Args:
-            player: Player configuration dictionary.
-
-        Returns:
-            List of command arguments.
-        """
-        name = player["name"]
-        cmd = [
-            "squeezelite",
-            "-n",
-            player["name"],
-            "-o",
-            player["device"],
-            "-m",
-            player["mac_address"],
-        ]
-
-        if player.get("server_ip"):
-            cmd.extend(["-s", player["server_ip"]])
-
-        # Add logging
-        log_file = self.process.get_log_path(name)
-        cmd.extend(["-f", log_file])
-
-        # Add options for better compatibility with virtual/missing devices
-        cmd.extend(
-            [
-                "-a",
-                "80",  # Set buffer size
-                "-b",
-                "500:2000",  # Set buffer parameters
-                "-C",
-                "5",  # Close output device when idle
-            ]
-        )
-
-        # If using null device, add specific parameters
-        if player["device"] == "null":
-            cmd.extend(["-r", "44100"])  # Set sample rate for null device
-
-        return cmd
-
-    def _build_fallback_command(self, player: PlayerConfig) -> list[str]:
-        """
-        Build a fallback command using null device.
-
-        Args:
-            player: Player configuration dictionary.
-
-        Returns:
-            List of command arguments for null device fallback.
-        """
-        name = player["name"]
-        cmd = [
-            "squeezelite",
-            "-n",
-            player["name"],
-            "-o",
-            "null",  # Use null device
-            "-m",
-            player["mac_address"],
-        ]
-
-        if player.get("server_ip"):
-            cmd.extend(["-s", player["server_ip"]])
-
-        log_file = self.process.get_log_path(name)
-        cmd.extend(["-f", log_file])
-
-        cmd.extend(
-            [
-                "-a",
-                "80",
-                "-b",
-                "500:2000",
-                "-C",
-                "5",
-                "-r",
-                "44100",  # Required for null device
-            ]
-        )
-
-        return cmd
-
     def start_player(self, name: str) -> tuple[bool, str]:
         """
-        Start a squeezelite player process.
+        Start an audio player process.
 
-        Launches a new squeezelite subprocess with the player's configuration.
-        If the configured audio device fails, falls back to null device.
+        Launches a new subprocess using the appropriate provider's command.
+        If the provider supports fallback and the primary fails, tries fallback.
 
         Args:
             name: Name of the player to start.
@@ -432,20 +396,29 @@ class SqueezeliteManager:
         if self.process.is_running(name):
             return False, "Player already running"
 
-        # Build commands
-        cmd = self._build_squeezelite_command(player)
+        # Get the provider for this player
+        provider = self.providers.get_for_player(player)
+        if provider is None:
+            provider_type = player.get("provider", "squeezelite")
+            return False, f"Unknown provider type: {provider_type}"
 
-        # Only use fallback if not already using null device
+        # Get log path
+        log_path = self.process.get_log_path(name)
+
+        # Build command using provider
+        cmd = provider.build_command(player, log_path)
+
+        # Get fallback command if provider supports it
         fallback_cmd = None
-        if player["device"] != "null":
-            fallback_cmd = self._build_fallback_command(player)
+        if provider.supports_fallback():
+            fallback_cmd = provider.build_fallback_command(player, log_path)
 
-        logger.info(f"Starting player {name} with command: {' '.join(cmd)}")
+        logger.info(f"Starting player {name} ({provider.display_name}) with command: {' '.join(cmd)}")
 
         success, message = self.process.start(name, cmd, fallback_cmd)
 
         if success and fallback_cmd and "fallback" in message.lower():
-            return True, f"Player {name} started with null device (audio device '{player['device']}' not available)"
+            return True, f"Player {name} started with fallback (audio device '{player.get('device')}' not available)"
 
         return success, message
 
@@ -525,6 +498,8 @@ class SqueezeliteManager:
         """
         Get the current volume for a player.
 
+        Uses the player's provider for volume control.
+
         Args:
             name: Name of the player.
 
@@ -535,10 +510,14 @@ class SqueezeliteManager:
         if not player:
             return None
 
-        device = player["device"]
+        # Get the provider for this player
+        provider = self.providers.get_for_player(player)
+        if provider is None:
+            # Fall back to stored volume if provider not found
+            return player.get("volume", 75)
 
-        # Get actual hardware volume
-        actual_volume = self.audio.get_volume(device)
+        # Get actual volume via provider
+        actual_volume = provider.get_volume(player)
 
         # Update stored volume to match actual volume
         if "volume" not in player:
@@ -550,6 +529,8 @@ class SqueezeliteManager:
     def set_player_volume(self, name: str, volume: int) -> tuple[bool, str]:
         """
         Set the volume for a player.
+
+        Uses the player's provider for volume control.
 
         Args:
             name: Name of the player.
@@ -565,10 +546,16 @@ class SqueezeliteManager:
         if not 0 <= volume <= 100:
             return False, "Volume must be between 0 and 100"
 
-        device = player["device"]
+        # Get the provider for this player
+        provider = self.providers.get_for_player(player)
+        if provider is None:
+            # Just store volume if provider not found
+            player["volume"] = volume
+            self.config.save()
+            return True, f"Volume set to {volume}% (provider not available)"
 
-        # Set the hardware volume
-        success, message = self.audio.set_volume(device, volume)
+        # Set volume via provider
+        success, message = provider.set_volume(player, volume)
 
         # Always update stored volume regardless of hardware control success
         player["volume"] = volume
@@ -576,9 +563,18 @@ class SqueezeliteManager:
 
         return success, message
 
+    def get_available_providers(self) -> list[dict[str, str]]:
+        """
+        Get list of available provider types.
+
+        Returns:
+            List of provider info dictionaries.
+        """
+        return self.providers.get_provider_info()
+
 
 # =============================================================================
-# Initialize managers and the main SqueezeliteManager
+# Initialize managers and the main PlayerManager
 # =============================================================================
 
 try:
@@ -593,8 +589,14 @@ try:
     process_manager = ProcessManager(log_dir=LOG_DIR)
     logger.info("ProcessManager initialized")
 
-    manager = SqueezeliteManager(config_manager, audio_manager, process_manager)
-    logger.info("SqueezeliteManager initialized successfully")
+    # Initialize provider registry and register providers
+    provider_registry = ProviderRegistry()
+    provider_registry.register_instance("squeezelite", SqueezeliteProvider(audio_manager))
+    provider_registry.register_instance("sendspin", SendspinProvider(audio_manager))
+    logger.info(f"ProviderRegistry initialized with providers: {provider_registry.list_providers()}")
+
+    manager = PlayerManager(config_manager, audio_manager, process_manager, provider_registry)
+    logger.info("PlayerManager initialized successfully")
 
 except Exception as e:
     logger.error(f"Failed to initialize managers: {e}")
@@ -638,19 +640,42 @@ def get_devices():
     return jsonify({"devices": manager.get_audio_devices()})
 
 
+@app.route("/api/providers", methods=["GET"])
+def get_providers():
+    """API endpoint to get available player providers"""
+    return jsonify({"providers": manager.get_available_providers()})
+
+
 @app.route("/api/players", methods=["POST"])
 def create_player():
     """API endpoint to create a new player"""
     data = request.json
     name = data.get("name")
-    device = data.get("device")
+    device = data.get("device", "default")
+    provider_type = data.get("provider", "squeezelite")
     server_ip = data.get("server_ip", "")
+    server_url = data.get("server_url", "")
     mac_address = data.get("mac_address", "")
 
-    if not name or not device:
-        return jsonify({"success": False, "message": "Name and device are required"}), 400
+    if not name:
+        return jsonify({"success": False, "message": "Name is required"}), 400
 
-    success, message = manager.create_player(name, device, server_ip, mac_address)
+    # Extract any extra provider-specific config
+    extra_config = {
+        k: v
+        for k, v in data.items()
+        if k not in ("name", "device", "provider", "server_ip", "server_url", "mac_address")
+    }
+
+    success, message = manager.create_player(
+        name=name,
+        device=device,
+        provider_type=provider_type,
+        server_ip=server_ip,
+        server_url=server_url,
+        mac_address=mac_address,
+        **extra_config,
+    )
     return jsonify({"success": success, "message": message})
 
 
@@ -659,14 +684,29 @@ def update_player(name):
     """API endpoint to update a player"""
     data = request.json
     new_name = data.get("name", name)
-    device = data.get("device")
+    device = data.get("device", "default")
+    provider_type = data.get("provider")
     server_ip = data.get("server_ip", "")
+    server_url = data.get("server_url", "")
     mac_address = data.get("mac_address", "")
 
-    if not device:
-        return jsonify({"success": False, "message": "Device is required"}), 400
+    # Extract any extra provider-specific config
+    extra_config = {
+        k: v
+        for k, v in data.items()
+        if k not in ("name", "device", "provider", "server_ip", "server_url", "mac_address")
+    }
 
-    success, message = manager.update_player(name, new_name, device, server_ip, mac_address)
+    success, message = manager.update_player(
+        old_name=name,
+        new_name=new_name,
+        device=device,
+        provider_type=provider_type,
+        server_ip=server_ip,
+        server_url=server_url,
+        mac_address=mac_address,
+        **extra_config,
+    )
     if success:
         return jsonify({"success": success, "message": message, "new_name": new_name})
     else:

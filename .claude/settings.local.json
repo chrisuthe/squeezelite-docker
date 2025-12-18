@@ -5,7 +5,8 @@
       "Bash(ruff check:*)",
       "Bash(pushd:*)",
       "Bash(popd)",
-      "Bash(ruff format:*)"
+      "Bash(ruff format:*)",
+      "Bash(python -m ruff:*)"
     ]
   }
 }
