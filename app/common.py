@@ -190,6 +190,22 @@ def register_routes(app, manager):
                 }
             )
 
+    @app.route("/api/devices/test", methods=["POST"])
+    def test_audio_device():
+        """API endpoint to play a test tone on an audio device"""
+        data = request.json or {}
+        device = data.get("device")
+
+        if not device:
+            return jsonify({"success": False, "message": "Device is required"}), 400
+
+        # Check if manager has audio manager with test tone capability
+        if hasattr(manager, "audio") and hasattr(manager.audio, "play_test_tone"):
+            success, message = manager.audio.play_test_tone(device)
+            return jsonify({"success": success, "message": message})
+        else:
+            return jsonify({"success": False, "message": "Test tone not available in this version"}), 501
+
     @app.route("/api/providers", methods=["GET"])
     def get_providers():
         """API endpoint to get available player providers"""

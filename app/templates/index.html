@@ -179,12 +179,18 @@
 
                         <div class="mb-3">
                             <label for="editAudioDevice" class="form-label">Audio Device *</label>
-                            <select class="form-select" id="editAudioDevice" name="device" required>
-                                <option value="">Select an audio device...</option>
-                                {% for device in devices %}
-                                <option value="{{ device.id }}">{{ device.name }}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="input-group">
+                                <select class="form-select" id="editAudioDevice" name="device" required>
+                                    <option value="">Select an audio device...</option>
+                                    {% for device in devices %}
+                                    <option value="{{ device.id }}">{{ device.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary" onclick="testAudioDevice('edit')" title="Play test tone">
+                                    <i class="fas fa-volume-up"></i> Test
+                                </button>
+                            </div>
+                            <div class="form-text">Select a device and click Test to verify the output</div>
                         </div>
 
                         <div class="mb-3 squeezelite-field" id="editServerIPGroup">
@@ -234,12 +240,18 @@
 
                         <div class="mb-3">
                             <label for="audioDevice" class="form-label">Audio Device *</label>
-                            <select class="form-select" id="audioDevice" name="device" required>
-                                <option value="">Select an audio device...</option>
-                                {% for device in devices %}
-                                <option value="{{ device.id }}">{{ device.name }}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="input-group">
+                                <select class="form-select" id="audioDevice" name="device" required>
+                                    <option value="">Select an audio device...</option>
+                                    {% for device in devices %}
+                                    <option value="{{ device.id }}">{{ device.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary" onclick="testAudioDevice('add')" title="Play test tone">
+                                    <i class="fas fa-volume-up"></i> Test
+                                </button>
+                            </div>
+                            <div class="form-text">Select a device and click Test to verify the output</div>
                         </div>
 
                         <div class="mb-3 squeezelite-field" id="addServerIPGroup">
@@ -690,7 +702,49 @@
                 };
             });
         });
-        
+
+        // Test audio device with a tone
+        async function testAudioDevice(formPrefix) {
+            const deviceSelect = document.getElementById(formPrefix === 'edit' ? 'editAudioDevice' : 'audioDevice');
+            const providerSelect = document.getElementById(formPrefix === 'edit' ? 'editPlayerProvider' : 'playerProvider');
+            const testButton = deviceSelect.parentElement.querySelector('button');
+
+            const device = deviceSelect.value;
+            const provider = providerSelect ? providerSelect.value : 'squeezelite';
+
+            if (!device) {
+                showAlert('Please select an audio device first', 'warning');
+                return;
+            }
+
+            // Disable button and show loading state
+            const originalContent = testButton.innerHTML;
+            testButton.disabled = true;
+            testButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+
+            try {
+                const response = await fetch('/api/devices/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device, provider })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                } else {
+                    showAlert(result.message, 'warning');
+                }
+            } catch (error) {
+                showAlert('Error testing device: ' + error.message, 'danger');
+            } finally {
+                // Restore button state
+                testButton.disabled = false;
+                testButton.innerHTML = originalContent;
+            }
+        }
+
         // Handle edit player form submission
         document.getElementById('editPlayerForm').addEventListener('submit', async function(e) {
             e.preventDefault();

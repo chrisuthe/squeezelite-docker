@@ -2,12 +2,22 @@
 Audio Manager for device detection and volume control.
 
 Handles ALSA audio device enumeration, mixer control detection,
-and volume get/set operations via amixer.
+and volume get/set operations via amixer. Also supports PortAudio
+devices for test tones via the sounddevice library.
 """
 
 import logging
 import re
 import subprocess
+
+# Optional imports for PortAudio test tone support
+try:
+    import numpy as np
+    import sounddevice as sd
+
+    SOUNDDEVICE_AVAILABLE = True
+except ImportError:
+    SOUNDDEVICE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -343,3 +353,168 @@ class AudioManager:
             True if the device is virtual (null, pulse, dmix, default).
         """
         return device in VIRTUAL_AUDIO_DEVICES
+
+    def play_test_tone(
+        self,
+        device: str,
+        duration_secs: float = 2.0,
+        frequency_hz: int = 440,
+    ) -> tuple[bool, str]:
+        """
+        Play a test tone on an audio device to verify output mapping.
+
+        Routes to the appropriate backend based on device type:
+        - ALSA devices (hw:X,Y): Uses speaker-test utility
+        - PortAudio devices (numeric index): Uses sounddevice library
+
+        Args:
+            device: Device identifier. Either an ALSA device (e.g., 'hw:0,0')
+                   or a PortAudio device index (e.g., '0', '1', '2').
+            duration_secs: How long to play the tone (default: 2 seconds).
+            frequency_hz: Tone frequency in Hz (default: 440Hz, A4 note).
+
+        Returns:
+            Tuple of (success: bool, message: str).
+
+        Note:
+            - Virtual devices (null, dmix) will play silently or not at all
+            - PortAudio support requires sounddevice and numpy packages
+            - The tone plays synchronously and blocks until complete
+        """
+        if self.windows_mode:
+            return False, "Test tone not available in Windows compatibility mode"
+
+        # Check if this looks like a PortAudio device index (just a number)
+        if device.isdigit():
+            return self._play_test_tone_portaudio(int(device), duration_secs, frequency_hz)
+
+        if device == "null":
+            return True, "Test tone sent to null device (silent)"
+
+        # Use ALSA speaker-test for non-PortAudio devices
+        return self._play_test_tone_alsa(device, duration_secs, frequency_hz)
+
+    def _play_test_tone_portaudio(
+        self,
+        device_index: int,
+        duration_secs: float,
+        frequency_hz: int,
+    ) -> tuple[bool, str]:
+        """
+        Play a test tone on a PortAudio device using sounddevice.
+
+        Generates a sine wave and plays it through the specified PortAudio
+        device index. Used for testing Sendspin audio outputs.
+
+        Args:
+            device_index: PortAudio device index (0, 1, 2, etc.).
+            duration_secs: How long to play the tone.
+            frequency_hz: Tone frequency in Hz.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+        """
+        if not SOUNDDEVICE_AVAILABLE:
+            return False, "PortAudio test requires sounddevice package (not installed)"
+
+        try:
+            # Get device info to verify it exists and get sample rate
+            try:
+                device_info = sd.query_devices(device_index, "output")
+                sample_rate = int(device_info["default_samplerate"])
+                device_name = device_info["name"]
+            except (sd.PortAudioError, ValueError) as e:
+                return False, f"Invalid PortAudio device {device_index}: {e}"
+
+            logger.info(
+                f"Playing test tone on PortAudio device {device_index} "
+                f"({device_name}) at {frequency_hz}Hz for {duration_secs}s"
+            )
+
+            # Generate sine wave
+            t = np.linspace(0, duration_secs, int(sample_rate * duration_secs), dtype=np.float32)
+            tone = 0.5 * np.sin(2 * np.pi * frequency_hz * t)
+
+            # Play the tone (blocking)
+            sd.play(tone, samplerate=sample_rate, device=device_index)
+            sd.wait()
+
+            logger.info(f"Test tone completed on PortAudio device {device_index}")
+            return True, f"Test tone played on {device_name}"
+
+        except sd.PortAudioError as e:
+            logger.warning(f"PortAudio error on device {device_index}: {e}")
+            return False, f"PortAudio error: {e}"
+        except Exception as e:
+            logger.error(f"Error playing test tone on PortAudio device {device_index}: {e}")
+            return False, f"Error: {str(e)}"
+
+    def _play_test_tone_alsa(
+        self,
+        device: str,
+        duration_secs: float,
+        frequency_hz: int,
+    ) -> tuple[bool, str]:
+        """
+        Play a test tone on an ALSA device using speaker-test.
+
+        Uses the ALSA speaker-test utility to generate a sine wave on the
+        specified device. Used for testing Squeezelite audio outputs.
+
+        Args:
+            device: ALSA device identifier (e.g., 'hw:0,0', 'default').
+            duration_secs: How long to play the tone.
+            frequency_hz: Tone frequency in Hz.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+        """
+        try:
+            # speaker-test options:
+            # -D device: ALSA device to use
+            # -t sine: Generate sine wave
+            # -f freq: Frequency in Hz
+            # -l 1: Play 1 loop per channel
+            # -c 2: Use 2 channels (stereo)
+
+            cmd = [
+                "speaker-test",
+                "-D",
+                device,
+                "-t",
+                "sine",
+                "-f",
+                str(frequency_hz),
+                "-l",
+                "1",
+                "-c",
+                "2",
+            ]
+
+            logger.info(f"Playing test tone on ALSA device {device}: {' '.join(cmd)}")
+
+            # Run with timeout to prevent hanging
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=duration_secs + 5,
+            )
+
+            if result.returncode == 0:
+                logger.info(f"Test tone completed on ALSA device {device}")
+                return True, f"Test tone played on {device}"
+            else:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                logger.warning(f"speaker-test failed for {device}: {error_msg}")
+                return False, f"Test failed: {error_msg}"
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Test tone timed out on device {device}")
+            return False, "Test tone timed out"
+        except FileNotFoundError:
+            logger.warning("speaker-test command not found")
+            return False, "speaker-test utility not available"
+        except Exception as e:
+            logger.error(f"Error playing test tone on {device}: {e}")
+            return False, f"Error: {str(e)}"
