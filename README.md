@@ -40,16 +40,6 @@ This project enables you to run a single centralized server (like a NAS, Raspber
 ![Sendspin](https://img.shields.io/badge/Sendspin-Native%20Support-purple?style=for-the-badge)
 ![Snapcast](https://img.shields.io/badge/Snapcast-Synchronized%20Audio-red?style=for-the-badge)
 
-## Why This Approach?
-
-| Traditional Setup | This Solution |
-|-------------------|---------------|
-| Expensive wireless speakers per room | Affordable USB DACs + any speakers |
-| Vendor lock-in (Sonos, Bose, etc.) | Open source, works with any hardware |
-| Complex network configuration | Single Docker container |
-| Limited integration options | Full API + Music Assistant/LMS support |
-| Separate apps per brand | One web interface for all zones |
-
 ## Supported Player Backends
 
 - **[Squeezelite](https://github.com/ralph-irving/squeezelite)**: LMS/SlimProto protocol for Logitech Media Server
@@ -450,6 +440,12 @@ For detailed license information, see [LICENSES.md](LICENSES.md).
 | Latency | Low | Very low | Very low |
 | Setup | Server IP optional | Auto-discovery | Server IP optional |
 | Image | `latest` only | `latest` or `slim` | `latest` only |
+
+## 🤖 About This Project
+
+This entire project - code, documentation, tests, and Docker configuration - was generated using AI (Claude by Anthropic) via [Claude Code](https://claude.com/claude-code). A human provided direction, reviewed outputs, and made decisions, but the implementation was AI-assisted.
+
+This is an experiment in AI-augmented development. Use at your own discretion.
 
 ---
 
