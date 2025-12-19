@@ -227,9 +227,7 @@ def test_audio_commands() -> bool:
         if snapclient_path:
             print(f"✓ snapclient binary found at: {snapclient_path}")
             try:
-                subprocess.run(
-                    ["snapclient", "--version"], capture_output=True, text=True, timeout=5
-                )
+                subprocess.run(["snapclient", "--version"], capture_output=True, text=True, timeout=5)
                 print("✓ snapclient binary responds to commands")
             except subprocess.TimeoutExpired:
                 print("✗ snapclient command timed out")
