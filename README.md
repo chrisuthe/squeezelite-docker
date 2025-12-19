@@ -1,8 +1,37 @@
 # Multi-Room Audio Docker Controller
 
-![Multi-Room Controller](screenshot.png)
+<p align="center">
+  <img src="multiroom.jpg" alt="Multi-Room Audio Controller" width="400">
+</p>
 
-A containerized multi-room audio solution supporting [Squeezelite](https://github.com/ralph-irving/squeezelite) (LMS/SlimProto), [Sendspin](https://pypi.org/project/sendspin/) (Music Assistant native), and [Snapcast](https://github.com/badaix/snapcast) (synchronized multiroom) players with an intuitive web management interface. Perfect for creating synchronized audio zones throughout your home using USB DACs, built-in audio, or network audio devices.
+## The Core Concept
+
+**One server. Multiple audio outputs. Whole-home audio.**
+
+This project enables you to run a single centralized server (like a NAS, Raspberry Pi, or any Docker host) with multiple USB DACs or audio devices connected, creating independent audio zones throughout your home. Instead of buying expensive multi-room audio hardware, connect affordable USB DACs to a central machine and stream synchronized audio to every room.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     CENTRAL SERVER (Docker Host)                │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Multi-Room Audio Container                  │   │
+│  │                                                          │   │
+│  │   ┌──────────┐  ┌──────────┐  ┌──────────┐             │   │
+│  │   │ Player 1 │  │ Player 2 │  │ Player 3 │  ...        │   │
+│  │   │(Kitchen) │  │(Bedroom) │  │ (Patio)  │             │   │
+│  │   └────┬─────┘  └────┬─────┘  └────┬─────┘             │   │
+│  └────────┼─────────────┼─────────────┼────────────────────┘   │
+│           │             │             │                         │
+│      ┌────▼────┐   ┌────▼────┐   ┌────▼────┐                   │
+│      │USB DAC 1│   │USB DAC 2│   │USB DAC 3│                   │
+│      └────┬────┘   └────┬────┘   └────┬────┘                   │
+└───────────┼─────────────┼─────────────┼─────────────────────────┘
+            │             │             │
+       ┌────▼────┐   ┌────▼────┐   ┌────▼────┐
+       │ Kitchen │   │ Bedroom │   │  Patio  │
+       │Speakers │   │Speakers │   │Speakers │
+       └─────────┘   └─────────┘   └─────────┘
+```
 
 ![Multi-Room Audio Controller](https://img.shields.io/badge/Multi--Room-Audio%20Controller-blue?style=for-the-badge&logo=music)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker)
@@ -11,31 +40,34 @@ A containerized multi-room audio solution supporting [Squeezelite](https://githu
 ![Sendspin](https://img.shields.io/badge/Sendspin-Native%20Support-purple?style=for-the-badge)
 ![Snapcast](https://img.shields.io/badge/Snapcast-Synchronized%20Audio-red?style=for-the-badge)
 
-## 🎯 Project Goals
+## Why This Approach?
 
-Transform any system with Docker into a powerful multi-room audio controller by:
-- **Centralizing Control**: Manage all your audio zones from one elegant web interface
-- **Simplifying Deployment**: One container handles multiple audio players
-- **Supporting Multiple Backends**: Choose Squeezelite (LMS), Sendspin (Music Assistant native), or Snapcast (synchronized multiroom)
-- **Enabling Flexibility**: Support various audio outputs from USB DACs to network streams
-- **Ensuring Reliability**: Persistent configuration with automatic player recovery
-- **Providing Integration**: Seamless compatibility with Music Assistant and LMS servers
+| Traditional Setup | This Solution |
+|-------------------|---------------|
+| Expensive wireless speakers per room | Affordable USB DACs + any speakers |
+| Vendor lock-in (Sonos, Bose, etc.) | Open source, works with any hardware |
+| Complex network configuration | Single Docker container |
+| Limited integration options | Full API + Music Assistant/LMS support |
+| Separate apps per brand | One web interface for all zones |
+
+## Supported Player Backends
+
+- **[Squeezelite](https://github.com/ralph-irving/squeezelite)**: LMS/SlimProto protocol for Logitech Media Server
+- **[Sendspin](https://pypi.org/project/sendspin/)**: Native Music Assistant protocol with synchronized playback
+- **[Snapcast](https://github.com/badaix/snapcast)**: Synchronized multiroom audio with low-latency streaming
 
 ## ✨ Key Features
 
-### 🏠 **Multi-Room Audio Management**
-- Create unlimited audio players in a single container
-- **Squeezelite**: Traditional LMS/SlimProto protocol for Logitech Media Server
-- **Sendspin**: Native Music Assistant protocol with synchronized playback
-- **Snapcast**: Synchronized multiroom audio with low-latency streaming
-- Individual volume control for each audio zone
-- Real-time status monitoring with WebSocket updates
-- Automatic player discovery by Music Assistant
+- **Unlimited Players**: Create as many audio zones as you have outputs
+- **Individual Volume Control**: Adjust each zone independently
+- **Real-time Monitoring**: WebSocket-based live status updates
+- **Auto-Discovery**: Players automatically appear in Music Assistant/LMS
+- **Persistent Config**: Survives container restarts and updates
 
 ### 🎛️ **Intuitive Web Interface**
 - Modern, responsive design that works on all devices
 - Live status indicators and controls
-- Drag-and-drop simplicity for player management
+- Audio device test tones for easy setup
 - Built-in audio device detection and selection
 
 ### 🔌 **Comprehensive Audio Support**
