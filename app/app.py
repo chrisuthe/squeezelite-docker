@@ -40,7 +40,7 @@ from typing import Any
 
 from common import create_flask_app, register_routes, register_websocket_handlers, run_server, start_status_monitor
 from managers import AudioManager, ConfigManager, ProcessManager
-from providers import ProviderRegistry, SendspinProvider, SqueezeliteProvider
+from providers import ProviderRegistry, SendspinProvider, SnapcastProvider, SqueezeliteProvider
 
 # =============================================================================
 # LOGGING CONFIGURATION
@@ -550,6 +550,7 @@ try:
     provider_registry = ProviderRegistry()
     provider_registry.register_instance("squeezelite", SqueezeliteProvider(audio_manager))
     provider_registry.register_instance("sendspin", SendspinProvider(audio_manager))
+    provider_registry.register_instance("snapcast", SnapcastProvider(audio_manager))
     logger.info(f"ProviderRegistry initialized with providers: {provider_registry.list_providers()}")
 
     manager = PlayerManager(config_manager, audio_manager, process_manager, provider_registry)

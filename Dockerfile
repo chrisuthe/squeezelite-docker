@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     # Squeezelite player (LMS compatible)
     squeezelite \
+    # Snapcast client (synchronized multiroom audio)
+    snapclient \
     # Audio system (Ubuntu 24.04 package names)
     alsa-utils \
     alsa-base \
@@ -38,7 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
-    && which squeezelite && echo "Squeezelite installed successfully"
+    && which squeezelite && echo "Squeezelite installed successfully" \
+    && which snapclient && echo "Snapclient installed successfully"
 
 # Create application directory and required directories
 WORKDIR /app

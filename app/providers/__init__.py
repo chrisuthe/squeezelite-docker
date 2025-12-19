@@ -9,6 +9,7 @@ to be used interchangeably.
 from .base import PlayerProvider
 from .registry import ProviderRegistry
 from .sendspin import SendspinProvider
+from .snapcast import SnapcastProvider
 from .squeezelite import SqueezeliteProvider
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "ProviderRegistry",
     "SqueezeliteProvider",
     "SendspinProvider",
+    "SnapcastProvider",
 ]

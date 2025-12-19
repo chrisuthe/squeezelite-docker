@@ -74,6 +74,22 @@ def sample_sendspin_config():
 
 
 @pytest.fixture
+def sample_snapcast_config():
+    """Sample valid Snapcast player configuration."""
+    return {
+        "name": "Living Room",
+        "device": "hw:1,0",
+        "provider": "snapcast",
+        "server_ip": "192.168.1.50",
+        "host_id": "snapcast-living-room-abc123",
+        "latency": 100,
+        "volume": 75,
+        "autostart": True,
+        "enabled": True,
+    }
+
+
+@pytest.fixture
 def sample_players_dict(sample_squeezelite_config, sample_sendspin_config):
     """Sample dictionary of multiple player configurations."""
     return {
@@ -98,6 +114,15 @@ def minimal_sendspin_config():
     return {
         "name": "TestPlayer",
         "provider": "sendspin",
+    }
+
+
+@pytest.fixture
+def minimal_snapcast_config():
+    """Minimal valid Snapcast configuration (required fields only)."""
+    return {
+        "name": "TestPlayer",
+        "provider": "snapcast",
     }
 
 

@@ -10,7 +10,7 @@ Tests Performed:
     2. Directory Access: Checks /app/config, /app/logs, /app/data are writable
     3. Flask App: Tests basic Flask initialization and routing
     4. Audio Commands: Verifies audio player binaries exist
-       - Full image: squeezelite and sendspin
+       - Full image: squeezelite, sendspin, and snapclient
        - Slim image (SENDSPIN_CONTAINER=1): sendspin only
     5. Port Availability: Checks if port 8080 is available
 
@@ -220,6 +220,24 @@ def test_audio_commands() -> bool:
                 print(f"⚠ squeezelite help check failed: {e}")
         else:
             print("✗ squeezelite binary not found")
+            all_passed = False
+
+        # Check snapclient (only required for full image)
+        snapclient_path = shutil.which("snapclient")
+        if snapclient_path:
+            print(f"✓ snapclient binary found at: {snapclient_path}")
+            try:
+                subprocess.run(
+                    ["snapclient", "--version"], capture_output=True, text=True, timeout=5
+                )
+                print("✓ snapclient binary responds to commands")
+            except subprocess.TimeoutExpired:
+                print("✗ snapclient command timed out")
+                all_passed = False
+            except Exception as e:
+                print(f"⚠ snapclient version check failed: {e}")
+        else:
+            print("✗ snapclient binary not found")
             all_passed = False
 
     return all_passed
