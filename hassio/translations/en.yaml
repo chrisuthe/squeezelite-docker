@@ -1,0 +1,11 @@
+configuration:
+  log_level:
+    name: Log Level
+    description: >-
+      Set the logging verbosity for the add-on.
+      Debug provides the most detail for troubleshooting.
+  default_server_ip:
+    name: Default Server IP
+    description: >-
+      Default server IP address for new Squeezelite and Snapcast players.
+      Leave empty for auto-discovery. Players can override this individually.

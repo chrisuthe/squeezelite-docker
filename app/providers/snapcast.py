@@ -1,14 +1,18 @@
 """
 Snapcast player provider implementation.
 
-Handles Snapcast-specific command building, volume control via ALSA,
+Handles Snapcast-specific command building, volume control via ALSA/PulseAudio,
 and configuration validation for the Snapcast synchronized multiroom
 audio system.
+
+Supports both standalone Docker (ALSA) and HAOS (PulseAudio) environments.
 """
 
 import hashlib
 import logging
 from typing import Any
+
+from environment import get_player_backend_for_snapcast
 
 from .base import PlayerConfig, PlayerProvider
 
@@ -90,8 +94,9 @@ class SnapcastProvider(PlayerProvider):
         if latency and latency != 0:
             cmd.extend(["--latency", str(latency)])
 
-        # Force ALSA backend (not PulseAudio)
-        cmd.extend(["--player", "alsa"])
+        # Audio backend: ALSA for standalone Docker, PulseAudio for HAOS
+        player_backend = get_player_backend_for_snapcast()
+        cmd.extend(["--player", player_backend])
 
         # Logging output
         cmd.extend(["--logsink", f"file:{log_path}"])

@@ -1,14 +1,18 @@
 """
 Squeezelite player provider implementation.
 
-Handles Squeezelite-specific command building, volume control via ALSA,
+Handles Squeezelite-specific command building, volume control via ALSA/PulseAudio,
 and configuration validation.
+
+Supports both standalone Docker (ALSA) and HAOS (PulseAudio) environments.
 """
 
 import hashlib
 import logging
 import os
 from typing import Any
+
+from environment import get_squeezelite_output_device
 
 from .base import PlayerConfig, PlayerProvider
 
@@ -95,7 +99,7 @@ class SqueezeliteProvider(PlayerProvider):
         Args:
             player: Player configuration containing:
                 - name: Player name for LMS
-                - device: ALSA output device
+                - device: Audio output device (ALSA or PulseAudio)
                 - mac_address: MAC address for LMS identification
                 - server_ip: Optional LMS server address
             log_path: Path to the log file.
@@ -103,12 +107,15 @@ class SqueezeliteProvider(PlayerProvider):
         Returns:
             Command arguments list.
         """
+        # Transform device name for environment (ALSA → pulse for HAOS)
+        output_device = get_squeezelite_output_device(player["device"])
+
         cmd = [
             self.binary_name,
             "-n",
             player["name"],
             "-o",
-            player["device"],
+            output_device,
             "-m",
             player["mac_address"],
         ]
