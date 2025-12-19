@@ -316,9 +316,9 @@ class NewPlayerProvider(PlayerProvider):
 The `hassio/` directory contains Home Assistant OS add-on files:
 
 ```bash
-# Build locally
+# Build locally (uses community addon base image)
 cd hassio
-docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.11 -t multiroom-addon .
+docker build --build-arg BUILD_FROM=ghcr.io/hassio-addons/base-python:18.0.0 -t multiroom-addon .
 
 # Test in HAOS
 # Copy hassio/ folder to /addons/multiroom-audio on your HA instance

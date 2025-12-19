@@ -116,21 +116,15 @@ The HAOS add-on lives in the `hassio/` subdirectory and uses a separate Alpine-b
 ```bash
 cd hassio
 
-# Build for AMD64 (most common)
+# Build using the community addon base image (multi-arch)
 docker build \
-  --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.11 \
-  -t multiroom-audio-addon:local .
-
-# Build for ARM64 (Raspberry Pi 4/5)
-docker build \
-  --build-arg BUILD_FROM=ghcr.io/home-assistant/aarch64-base-python:3.11 \
-  -t multiroom-audio-addon:local .
-
-# Build for ARMv7 (Raspberry Pi 3)
-docker build \
-  --build-arg BUILD_FROM=ghcr.io/home-assistant/armv7-base-python:3.11 \
+  --build-arg BUILD_FROM=ghcr.io/hassio-addons/base-python:18.0.0 \
   -t multiroom-audio-addon:local .
 ```
+
+**Supported architectures:** amd64, aarch64 (ARM64)
+
+Note: armv7 (32-bit ARM) is not supported as the Python 3.11+ base images are not available for that architecture.
 
 ### Testing the Add-on Locally
 

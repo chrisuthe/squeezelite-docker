@@ -32,10 +32,10 @@ Thank you for your interest in contributing to this project!
 ### HAOS Add-on Development
 
 ```bash
-# Build the add-on locally
+# Build the add-on locally (uses community addon base image)
 cd hassio
 docker build \
-  --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.11 \
+  --build-arg BUILD_FROM=ghcr.io/hassio-addons/base-python:18.0.0 \
   -t multiroom-audio-addon:local .
 
 # Test locally (without full HAOS integration)
