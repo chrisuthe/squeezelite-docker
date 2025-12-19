@@ -10,7 +10,6 @@ startup: services
 arch:
   - aarch64
   - amd64
-  - armv7
 
 # Hardware access
 audio: true
