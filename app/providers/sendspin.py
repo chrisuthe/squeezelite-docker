@@ -2,15 +2,13 @@
 Sendspin player provider implementation.
 
 Handles Sendspin-specific command building, volume control,
-configuration validation, and now-playing metadata retrieval
-for the Sendspin synchronized multi-room audio protocol.
+and configuration validation for the Sendspin synchronized
+multi-room audio protocol.
 """
 
 import hashlib
 import logging
 from typing import Any
-
-from managers.sendspin_metadata import TrackMetadata, get_metadata_manager
 
 from .base import PlayerConfig, PlayerProvider
 
@@ -66,7 +64,6 @@ class SendspinProvider(PlayerProvider):
                 - name: Player display name
                 - device: Audio output device (PortAudio index or name, NOT ALSA hw:X,Y)
                 - client_id: Unique client identifier
-                - server_url: Optional WebSocket server URL
                 - delay_ms: Optional latency compensation
             log_path: Path to the log file (not directly used by sendspin,
                      but kept for consistency).
@@ -100,10 +97,6 @@ class SendspinProvider(PlayerProvider):
                     "Use 'sendspin --list-audio-devices' to see available PortAudio devices."
                 )
 
-        # Add server URL if specified (otherwise uses mDNS discovery)
-        if player.get("server_url"):
-            cmd.extend(["--url", player["server_url"]])
-
         # Add latency compensation if specified
         delay_ms = player.get("delay_ms")
         if delay_ms is not None and delay_ms != 0:
@@ -129,8 +122,7 @@ class SendspinProvider(PlayerProvider):
         Get volume via ALSA mixer.
 
         Note: Sendspin has protocol-native volume control, but for
-        local hardware control we use ALSA. Future enhancement could
-        query volume via the Sendspin protocol.
+        local hardware control we use ALSA.
 
         Args:
             player: Player configuration with device info.
@@ -146,8 +138,7 @@ class SendspinProvider(PlayerProvider):
         Set volume via ALSA mixer.
 
         Note: Sendspin has protocol-native volume control, but for
-        local hardware control we use ALSA. Future enhancement could
-        set volume via the Sendspin protocol (WebSocket command).
+        local hardware control we use ALSA.
 
         Args:
             player: Player configuration with device info.
@@ -164,7 +155,7 @@ class SendspinProvider(PlayerProvider):
         Validate sendspin configuration.
 
         Required fields: name
-        Optional fields: device, server_url, client_id, delay_ms
+        Optional fields: device, client_id, delay_ms
 
         Args:
             config: Configuration to validate.
@@ -183,11 +174,6 @@ class SendspinProvider(PlayerProvider):
         # Check for invalid characters in name
         if "/" in name or "\\" in name or "\x00" in name:
             return False, "Player name contains invalid characters"
-
-        # Validate server URL format if provided
-        server_url = config.get("server_url", "")
-        if server_url and not server_url.startswith(("ws://", "wss://")):
-            return False, "Server URL must start with ws:// or wss://"
 
         # Validate delay_ms if provided
         delay_ms = config.get("delay_ms")
@@ -209,7 +195,6 @@ class SendspinProvider(PlayerProvider):
         return {
             "provider": self.provider_type,
             "device": "default",
-            "server_url": "",  # Empty means use mDNS discovery
             "client_id": "",  # Will be auto-generated from name
             "delay_ms": 0,
             "log_level": DEFAULT_LOG_LEVEL,
@@ -280,66 +265,3 @@ class SendspinProvider(PlayerProvider):
             Unique identifier string.
         """
         return player.get("client_id") or player.get("name", "unknown")
-
-    def get_now_playing(self, player: PlayerConfig) -> TrackMetadata | None:
-        """
-        Get now-playing metadata for a Sendspin player.
-
-        Connects to the Sendspin server using the metadata role to retrieve
-        current track information including title, artist, album, and artwork.
-
-        Args:
-            player: Player configuration with server_url.
-
-        Returns:
-            TrackMetadata object if available, None if no server configured
-            or connection not established.
-        """
-        server_url = player.get("server_url")
-        if not server_url:
-            logger.debug(f"No server_url for player {player.get('name')}, cannot get metadata")
-            return None
-
-        player_name = player.get("name", "unknown")
-        manager = get_metadata_manager()
-
-        # Get or create metadata client for this player
-        client = manager.get_or_create_client(player_name, server_url)
-        if client is None:
-            return None
-
-        return client.get_metadata()
-
-    def start_metadata_client(self, player: PlayerConfig) -> bool:
-        """
-        Start the metadata client for a player.
-
-        Called when a Sendspin player is started to begin receiving
-        now-playing updates.
-
-        Args:
-            player: Player configuration with server_url.
-
-        Returns:
-            True if client started successfully, False otherwise.
-        """
-        server_url = player.get("server_url")
-        if not server_url:
-            return False
-
-        player_name = player.get("name", "unknown")
-        manager = get_metadata_manager()
-        client = manager.get_or_create_client(player_name, server_url)
-        return client is not None
-
-    def stop_metadata_client(self, player_name: str) -> None:
-        """
-        Stop the metadata client for a player.
-
-        Called when a Sendspin player is stopped to clean up resources.
-
-        Args:
-            player_name: Name of the player.
-        """
-        manager = get_metadata_manager()
-        manager.remove_client(player_name)

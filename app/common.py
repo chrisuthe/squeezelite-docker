@@ -358,40 +358,6 @@ def register_routes(app, manager):
             logger.error(f"Request data: {request.get_data()}")
             return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
 
-    @app.route("/api/players/<name>/nowplaying", methods=["GET"])
-    def get_player_nowplaying(name):
-        """API endpoint to get now-playing metadata for a player (Sendspin only)"""
-        try:
-            # Check if manager has the method to get now playing info
-            if hasattr(manager, "get_now_playing"):
-                metadata = manager.get_now_playing(name)
-                if metadata is None:
-                    return jsonify(
-                        {
-                            "success": True,
-                            "available": False,
-                            "message": "Now playing not available for this player",
-                        }
-                    )
-                return jsonify(
-                    {
-                        "success": True,
-                        "available": True,
-                        "metadata": metadata.to_dict() if hasattr(metadata, "to_dict") else metadata,
-                    }
-                )
-            else:
-                return jsonify(
-                    {
-                        "success": True,
-                        "available": False,
-                        "message": "Now playing not supported by this manager",
-                    }
-                )
-        except Exception as e:
-            logger.error(f"Error in get_player_nowplaying for {name}: {e}")
-            return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
-
     @app.route("/api/debug/audio", methods=["GET"])
     def debug_audio():
         """Debug endpoint to check audio device detection"""

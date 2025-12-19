@@ -8,20 +8,10 @@ responsibilities, extracted from the original monolithic SqueezeliteManager.
 from .audio_manager import AudioManager
 from .config_manager import ConfigManager, ConfigValidationError
 from .process_manager import ProcessManager
-from .sendspin_metadata import (
-    MetadataClientManager,
-    SendspinMetadataClient,
-    TrackMetadata,
-    get_metadata_manager,
-)
 
 __all__ = [
     "AudioManager",
     "ConfigManager",
     "ConfigValidationError",
-    "MetadataClientManager",
     "ProcessManager",
-    "SendspinMetadataClient",
-    "TrackMetadata",
-    "get_metadata_manager",
 ]

@@ -38,75 +38,6 @@
             opacity: 0.6;
             pointer-events: none;
         }
-        /* Now Playing styles */
-        .now-playing {
-            display: none;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 12px;
-            color: white;
-        }
-        .now-playing.active {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .now-playing-artwork {
-            width: 64px;
-            height: 64px;
-            border-radius: 6px;
-            object-fit: cover;
-            background: #2a2a4a;
-            flex-shrink: 0;
-        }
-        .now-playing-artwork.placeholder {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            color: #6c757d;
-        }
-        .now-playing-info {
-            flex-grow: 1;
-            min-width: 0;
-            overflow: hidden;
-        }
-        .now-playing-title {
-            font-weight: 600;
-            font-size: 0.95rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-bottom: 2px;
-        }
-        .now-playing-artist {
-            font-size: 0.85rem;
-            color: #adb5bd;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .now-playing-album {
-            font-size: 0.75rem;
-            color: #6c757d;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .now-playing-progress {
-            height: 3px;
-            background: #3a3a5a;
-            border-radius: 2px;
-            margin-top: 8px;
-            overflow: hidden;
-        }
-        .now-playing-progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            border-radius: 2px;
-            transition: width 1s linear;
-        }
     </style>
 </head>
 <body class="bg-light">
@@ -166,23 +97,6 @@
                                             {% if statuses.get(name) %}Running{% else %}Stopped{% endif %}
                                         </span>
                                     </div>
-
-                                    <!-- Now Playing section (Sendspin only) -->
-                                    {% if player.provider == 'sendspin' %}
-                                    <div class="now-playing" id="now-playing-{{ name|e }}" data-player="{{ name|e }}">
-                                        <div class="now-playing-artwork placeholder" id="now-playing-artwork-{{ name|e }}">
-                                            <i class="fas fa-music"></i>
-                                        </div>
-                                        <div class="now-playing-info">
-                                            <div class="now-playing-title" id="now-playing-title-{{ name|e }}">Not Playing</div>
-                                            <div class="now-playing-artist" id="now-playing-artist-{{ name|e }}"></div>
-                                            <div class="now-playing-album" id="now-playing-album-{{ name|e }}"></div>
-                                            <div class="now-playing-progress">
-                                                <div class="now-playing-progress-bar" id="now-playing-progress-{{ name|e }}" style="width: 0%"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {% endif %}
 
                                     <div class="player-details mb-3">
                                         <small class="text-muted">
@@ -420,9 +334,13 @@
             const serverIPGroup = document.getElementById(formPrefix === 'edit' ? 'editServerIPGroup' : 'addServerIPGroup');
             const deviceSelect = document.getElementById(formPrefix === 'edit' ? 'editAudioDevice' : 'audioDevice');
 
-            if (providerSelect && serverIPGroup) {
+            if (providerSelect) {
                 const isSqueezelite = providerSelect.value === 'squeezelite';
-                serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
+
+                // Show server IP for Squeezelite only
+                if (serverIPGroup) {
+                    serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
+                }
             }
 
             // Update device list based on provider
@@ -851,9 +769,9 @@
             // This handler just ensures provider fields are in sync
             const providerSelect = document.getElementById('editPlayerProvider');
             const serverIPGroup = document.getElementById('editServerIPGroup');
-            if (providerSelect && serverIPGroup) {
+            if (providerSelect) {
                 const isSqueezelite = providerSelect.value === 'squeezelite';
-                serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
+                if (serverIPGroup) serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
             }
         });
 
@@ -867,7 +785,7 @@
             // Populate provider dropdown (will default to first available)
             await populateProviderDropdown(providerSelect);
 
-            // Show/hide server IP based on selected provider
+            // Show/hide provider-specific fields
             const isSqueezelite = providerSelect.value === 'squeezelite';
             serverIPGroup.style.display = isSqueezelite ? 'block' : 'none';
 
@@ -877,130 +795,6 @@
 
         // Load providers on page load to pre-cache them
         loadProviders();
-
-        // ==========================================
-        // Now Playing (Sendspin metadata)
-        // ==========================================
-
-        // Track which players are Sendspin type for now-playing polling
-        const sendspinPlayers = [];
-
-        // Initialize Sendspin player tracking
-        document.addEventListener('DOMContentLoaded', function() {
-            const nowPlayingElements = document.querySelectorAll('[id^="now-playing-"][data-player]');
-            nowPlayingElements.forEach(el => {
-                const playerName = el.dataset.player;
-                if (playerName) {
-                    sendspinPlayers.push(playerName);
-                }
-            });
-
-            // Start polling for now-playing info if we have Sendspin players
-            if (sendspinPlayers.length > 0) {
-                pollNowPlaying();
-                setInterval(pollNowPlaying, 5000); // Poll every 5 seconds
-            }
-        });
-
-        // Poll now-playing endpoint for all Sendspin players
-        async function pollNowPlaying() {
-            for (const playerName of sendspinPlayers) {
-                try {
-                    await fetchNowPlaying(playerName);
-                } catch (error) {
-                    console.error('Error fetching now playing for', playerName, ':', error);
-                }
-            }
-        }
-
-        // Fetch and update now-playing info for a single player
-        async function fetchNowPlaying(playerName) {
-            const container = document.getElementById(`now-playing-${playerName}`);
-            if (!container) return;
-
-            // Only fetch if player is running
-            const statusIndicator = document.getElementById(`status-${playerName}`);
-            const isRunning = statusIndicator && statusIndicator.classList.contains('status-running');
-
-            if (!isRunning) {
-                // Hide now-playing when player is stopped
-                container.classList.remove('active');
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/players/${encodeURIComponent(playerName)}/nowplaying`);
-                const result = await response.json();
-
-                if (result.success && result.available && result.metadata && result.metadata.is_playing) {
-                    updateNowPlayingDisplay(playerName, result.metadata);
-                    container.classList.add('active');
-                } else {
-                    // No metadata or not playing - hide the section
-                    container.classList.remove('active');
-                }
-            } catch (error) {
-                console.error('Error fetching now playing:', error);
-                container.classList.remove('active');
-            }
-        }
-
-        // Update the now-playing display with metadata
-        function updateNowPlayingDisplay(playerName, metadata) {
-            const titleEl = document.getElementById(`now-playing-title-${playerName}`);
-            const artistEl = document.getElementById(`now-playing-artist-${playerName}`);
-            const albumEl = document.getElementById(`now-playing-album-${playerName}`);
-            const artworkEl = document.getElementById(`now-playing-artwork-${playerName}`);
-            const progressEl = document.getElementById(`now-playing-progress-${playerName}`);
-
-            // Update text fields (use textContent for XSS safety)
-            if (titleEl) titleEl.textContent = metadata.title || 'Unknown Track';
-            if (artistEl) artistEl.textContent = metadata.artist || '';
-            if (albumEl) albumEl.textContent = metadata.album || '';
-
-            // Update artwork
-            if (artworkEl) {
-                if (metadata.artwork_url) {
-                    // Replace placeholder with actual image
-                    if (artworkEl.classList.contains('placeholder')) {
-                        artworkEl.classList.remove('placeholder');
-                        artworkEl.innerHTML = '';
-                        const img = document.createElement('img');
-                        img.className = 'now-playing-artwork';
-                        img.alt = 'Album artwork';
-                        img.src = metadata.artwork_url;
-                        img.onerror = function() {
-                            // Revert to placeholder on load error
-                            artworkEl.classList.add('placeholder');
-                            artworkEl.innerHTML = '<i class="fas fa-music"></i>';
-                        };
-                        artworkEl.parentNode.replaceChild(img, artworkEl);
-                    } else if (artworkEl.tagName === 'IMG') {
-                        // Update existing image
-                        if (artworkEl.src !== metadata.artwork_url) {
-                            artworkEl.src = metadata.artwork_url;
-                        }
-                    }
-                } else {
-                    // No artwork URL - show placeholder
-                    if (!artworkEl.classList.contains('placeholder') && artworkEl.tagName !== 'DIV') {
-                        const placeholder = document.createElement('div');
-                        placeholder.className = 'now-playing-artwork placeholder';
-                        placeholder.id = `now-playing-artwork-${playerName}`;
-                        placeholder.innerHTML = '<i class="fas fa-music"></i>';
-                        artworkEl.parentNode.replaceChild(placeholder, artworkEl);
-                    }
-                }
-            }
-
-            // Update progress bar
-            if (progressEl && metadata.track_duration_ms > 0) {
-                const progress = Math.min(100, (metadata.track_progress_ms / metadata.track_duration_ms) * 100);
-                progressEl.style.width = `${progress}%`;
-            } else if (progressEl) {
-                progressEl.style.width = '0%';
-            }
-        }
     </script>
 </body>
 </html>
