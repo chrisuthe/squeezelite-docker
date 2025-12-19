@@ -179,10 +179,41 @@ This document tracks files that need commenting, documentation, or code cleanup 
 | Metric | Current State |
 |--------|---------------|
 | **Security Issues** | ~~5 critical, 3 high~~ → 0 critical, 0 high (fixed or accepted risk) |
-| **Documentation Coverage** | ~90% (comprehensive docstrings in all Python files) |
-| **Type Coverage** | ~80% (SqueezeliteManager class and health_check fully typed) |
-| **Test Coverage** | ~80% (100+ unit tests in tests/) |
+| **Documentation Coverage** | ~95% (comprehensive docstrings in all Python files, provider docs) |
+| **Type Coverage** | ~85% (all managers, providers, and schemas fully typed) |
+| **Test Coverage** | ~85% (100+ unit tests including provider tests) |
 | **Linting Score** | ✓ Passing (Ruff configured) |
+
+---
+
+## Recent Additions (Require Review)
+
+### New Provider: Snapcast (`app/providers/snapcast.py`)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Type hints | ✓ Done | Full type annotations |
+| Docstrings | ✓ Done | All methods documented |
+| Unit tests | ✓ Done | `tests/test_snapcast_provider.py` |
+
+### Environment Detection (`app/environment.py`)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Type hints | ✓ Done | Full type annotations |
+| Docstrings | ✓ Done | All functions documented |
+| Unit tests | Pending | Mock-based tests needed |
+
+### HAOS Add-on (`hassio/`)
+
+| File | Status | Notes |
+|------|--------|-------|
+| `config.yaml` | ✓ Done | HAOS add-on metadata |
+| `Dockerfile` | ✓ Done | Alpine-based build |
+| `run.sh` | ✓ Done | Bashio startup script |
+| `DOCS.md` | ✓ Done | User documentation |
+| `CHANGELOG.md` | ✓ Done | Version history |
+| `translations/en.yaml` | ✓ Done | Config UI translations |
 
 ---
 

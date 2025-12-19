@@ -1,15 +1,21 @@
-# Squeezelite Multi-Room Docker Controller - New Engineer Onboarding
+# Multi-Room Audio Docker Controller - New Engineer Onboarding
 
 Welcome! This guide will get you productive on this project as quickly as possible.
 
 ## What Is This Project?
 
-A containerized multi-room audio controller built around **Squeezelite**, a lightweight audio player. It provides:
+A containerized multi-room audio controller supporting multiple player backends:
+- **Squeezelite** - LMS/SlimProto protocol for Logitech Media Server
+- **Sendspin** - Native Music Assistant protocol
+- **Snapcast** - Synchronized multiroom audio
+
+It provides:
 - **Web UI** for managing audio players across multiple rooms/zones
 - **REST API** for automation and integration
 - **Real-time updates** via WebSocket
-- **Hardware audio device support** via ALSA
+- **Hardware audio device support** via ALSA (Docker) or PulseAudio (HAOS)
 - Integration with **Music Assistant** and **Logitech Media Server**
+- **Home Assistant OS add-on** support
 
 ---
 
@@ -31,45 +37,41 @@ docker-compose up --build
 
 ---
 
-## Project Structure at a Glance
+## Project Structure
 
 ```
 squeezelite-docker/
 ├── app/
-│   ├── app.py              # Main Flask app (USE THIS)
-│   ├── app_enhanced.py     # Extended version with state persistence
-│   ├── health_check.py     # Container health verification
+│   ├── app.py                # Main Flask application factory
+│   ├── common.py             # Shared Flask routes
+│   ├── environment.py        # Environment detection (Docker vs HAOS)
+│   ├── health_check.py       # Container health verification
+│   ├── managers/
+│   │   ├── audio_manager.py  # ALSA/PulseAudio device handling
+│   │   ├── config_manager.py # YAML configuration persistence
+│   │   ├── player_manager.py # High-level player orchestration
+│   │   └── process_manager.py # Subprocess lifecycle management
+│   ├── providers/
+│   │   ├── base.py           # Abstract PlayerProvider interface
+│   │   ├── squeezelite.py    # Squeezelite implementation
+│   │   ├── sendspin.py       # Sendspin implementation
+│   │   └── snapcast.py       # Snapcast implementation
+│   ├── schemas/
+│   │   └── player_config.py  # Pydantic validation schemas
 │   ├── templates/
-│   │   └── index.html      # Web UI (Bootstrap 5 + Socket.IO)
+│   │   └── index.html        # Web UI (Bootstrap 5 + Socket.IO)
 │   ├── static/
-│   │   └── style.css       # Custom styling
-│   └── swagger.yaml        # API documentation (OpenAPI 3.0)
-├── config/
-│   └── players.yaml        # Player configurations (auto-generated)
-├── Dockerfile              # Container definition
-├── docker-compose.yml      # Production config
-├── entrypoint.sh           # Container startup script
-└── supervisord.conf        # Process management
+│   │   └── style.css         # Custom styling
+│   └── swagger.yaml          # API documentation (OpenAPI 3.0)
+├── hassio/                   # Home Assistant OS add-on
+│   ├── config.yaml           # Add-on metadata
+│   ├── Dockerfile            # Alpine-based build
+│   └── DOCS.md               # Add-on documentation
+├── tests/                    # Pytest test suite
+├── Dockerfile                # Production container (Debian)
+├── Dockerfile.slim           # Slim variant (Sendspin only)
+└── docker-compose.yml        # Development/production config
 ```
-
----
-
-## Key Files to Understand First
-
-### Priority 1: Core Application Logic
-
-| File | Purpose | Lines | Read This For |
-|------|---------|-------|---------------|
-| [app/app.py](app/app.py) | Main Flask application | 826 | Everything: API routes, player management, audio control |
-| [app/templates/index.html](app/templates/index.html) | Web interface | ~700 | UI logic, WebSocket handling, API calls |
-
-### Priority 2: Configuration & Infrastructure
-
-| File | Purpose | Read This For |
-|------|---------|---------------|
-| [swagger.yaml](app/swagger.yaml) | API specification | Understanding all REST endpoints |
-| [Dockerfile](Dockerfile) | Container build | System dependencies, audio libraries |
-| [supervisord.conf](supervisord.conf) | Process supervision | How the app is started/managed |
 
 ---
 
@@ -79,24 +81,31 @@ squeezelite-docker/
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Docker Container                          │
 ├─────────────────────────────────────────────────────────────────┤
-│  supervisord                                                     │
-│       │                                                          │
-│       ▼                                                          │
 │  Flask App (app.py:8080)                                        │
 │       │                                                          │
 │  ┌────┴─────────────────────────────────────────────┐           │
-│  │  SqueezeliteManager                              │           │
-│  │  ├── Player Configuration (YAML)                 │           │
-│  │  ├── Process Management (subprocess)             │           │
-│  │  ├── Audio Device Detection (aplay)              │           │
-│  │  └── Volume Control (amixer)                     │           │
-│  └──────────────────────────────────────────────────┘           │
+│  │  PlayerManager                                    │           │
+│  │       │                                           │           │
+│  │  ┌────┴────────────────────────────────────┐     │           │
+│  │  │  Provider Registry                       │     │           │
+│  │  │  ├── SqueezeliteProvider                 │     │           │
+│  │  │  ├── SendspinProvider                    │     │           │
+│  │  │  └── SnapcastProvider                    │     │           │
+│  │  └──────────────────────────────────────────┘     │           │
+│  │       │                                           │           │
+│  │  ┌────┴────────────────────────────────────┐     │           │
+│  │  │  Managers                                │     │           │
+│  │  │  ├── ConfigManager (YAML persistence)   │     │           │
+│  │  │  ├── ProcessManager (subprocess)        │     │           │
+│  │  │  └── AudioManager (ALSA/PulseAudio)     │     │           │
+│  │  └──────────────────────────────────────────┘     │           │
+│  └───────────────────────────────────────────────────┘           │
 │       │                                                          │
 │       ▼                                                          │
-│  Squeezelite Processes (one per audio player)                   │
+│  Player Processes (squeezelite, sendspin, snapclient)           │
 │       │                                                          │
 │       ▼                                                          │
-│  ALSA Audio Devices                                              │
+│  Audio Devices (ALSA hw:X,Y or PulseAudio sinks)                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -104,65 +113,94 @@ squeezelite-docker/
 
 ## Key Concepts
 
-### 1. Players
-A "player" is a Squeezelite instance that:
-- Connects to a Logitech Media Server (or Music Assistant)
-- Outputs audio to a specific device (soundcard, virtual device, etc.)
-- Has a unique name and MAC address
+### 1. Providers
+A provider is a player backend implementation:
 
-### 2. Audio Devices
-Identified as `hw:X,Y` format:
-- `X` = Card number
-- `Y` = Device number
-- Special devices: `null` (testing), `pulse` (PulseAudio), `default`
+| Provider | Binary | Protocol | Server |
+|----------|--------|----------|--------|
+| `squeezelite` | squeezelite | SlimProto | LMS / Music Assistant |
+| `sendspin` | sendspin | Native | Music Assistant |
+| `snapcast` | snapclient | Snapcast | Snapcast Server |
 
-### 3. Configuration Storage
-All player configs stored in `/app/config/players.yaml`:
+Each provider implements the `PlayerProvider` interface:
+- `build_command()` - Generate CLI arguments
+- `get_volume()` / `set_volume()` - Volume control
+- `validate_config()` - Configuration validation
+- `prepare_config()` - Default value generation
+
+### 2. Players
+A "player" is a configured audio zone that:
+- Uses a specific provider (squeezelite, sendspin, or snapcast)
+- Outputs to a specific audio device
+- Has a unique name and identifier (MAC address or host ID)
+- Can be started/stopped independently
+
+### 3. Audio Devices
+- **ALSA format**: `hw:X,Y` where X=card, Y=device
+- **Virtual devices**: `null`, `pulse`, `dmix`, `default`
+- **PulseAudio** (HAOS): Sink names from `pactl list sinks`
+
+### 4. Environment Detection
+The `environment.py` module detects runtime context:
+- **Standalone Docker**: Uses ALSA directly
+- **HAOS Add-on**: Uses PulseAudio via hassio_audio
+
+### 5. Configuration Storage
+Player configs stored in `/app/config/players.yaml`:
 ```yaml
 LivingRoom:
   name: LivingRoom
+  provider: squeezelite
   device: hw:1,0
   server_ip: 192.168.1.100
   mac_address: aa:bb:cc:dd:ee:ff
   enabled: true
   volume: 75
+
+Kitchen:
+  name: Kitchen
+  provider: sendspin
+  device: "0"
+  volume: 80
+
+Office:
+  name: Office
+  provider: snapcast
+  device: hw:2,0
+  server_ip: 192.168.1.50
+  host_id: snapcast-office-abc123
 ```
 
 ---
 
-## Data Flow: How Things Work
+## Data Flow
 
 ### Creating a Player
 ```
-Web UI Form → POST /api/players → SqueezeliteManager.create_player()
-    → Generate MAC if needed → Save to players.yaml → Return success
+Web UI Form → POST /api/players → PlayerManager.create_player()
+    → Provider.validate_config() → Provider.prepare_config()
+    → ConfigManager.set_player() → ConfigManager.save() → Return success
 ```
 
 ### Starting a Player
 ```
-Click Start → POST /api/players/{name}/start → subprocess.Popen(squeezelite ...)
-    → Process starts → Status monitor detects → WebSocket update → UI updates
+Click Start → POST /api/players/{name}/start → PlayerManager.start_player()
+    → Provider.build_command() → ProcessManager.start_process()
+    → subprocess.Popen() → Status monitor → WebSocket update → UI updates
 ```
 
 ### Volume Control
 ```
 Slider move → debounce 300ms → POST /api/players/{name}/volume
-    → amixer command → Update config → Return success
-```
-
-### Real-time Status Updates
-```
-Background thread (2s interval) → Check all processes → WebSocket emit
-    → Browser receives → Update all status indicators
+    → Provider.set_volume() → AudioManager.set_volume()
+    → amixer/pactl command → Return success
 ```
 
 ---
 
 ## API Quick Reference
 
-The API is fully documented in Swagger UI: http://localhost:8080/api/docs
-
-### Most Used Endpoints
+Full docs at http://localhost:8080/api/docs
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
@@ -172,7 +210,9 @@ The API is fully documented in Swagger UI: http://localhost:8080/api/docs
 | `POST` | `/api/players/{name}/stop` | Stop a player |
 | `POST` | `/api/players/{name}/volume` | Set volume (0-100) |
 | `DELETE` | `/api/players/{name}` | Delete a player |
-| `GET` | `/api/devices` | List audio devices |
+| `GET` | `/api/devices` | List ALSA audio devices |
+| `GET` | `/api/devices/portaudio` | List PortAudio devices (for Sendspin) |
+| `POST` | `/api/devices/{device}/test` | Play test tone |
 
 ---
 
@@ -183,54 +223,112 @@ The API is fully documented in Swagger UI: http://localhost:8080/api/docs
 ```bash
 cd app
 pip install -r ../requirements.txt
-python app.py
+python -c "from app import create_app; create_app().run(host='0.0.0.0', port=8080)"
 ```
 
-Note: Audio features won't work on Windows/Mac (ALSA is Linux-only).
+Note: Audio features require Linux (ALSA) or HAOS (PulseAudio).
 
-### Making Changes
+### Running Tests
 
-1. Edit `app/app.py` for backend changes
-2. Edit `app/templates/index.html` for UI changes
-3. Changes to static files (`style.css`) apply immediately
-4. Python changes require restart (or use Flask debug mode)
+```bash
+# All tests
+pytest tests/ -v
+
+# Specific test file
+pytest tests/test_squeezelite_provider.py -v
+
+# With coverage
+pytest tests/ --cov=app --cov-report=html
+```
+
+### Linting
+
+```bash
+ruff check .
+ruff format .
+```
 
 ### Testing Without Hardware
 
-Use `docker-compose.no-audio.yml` - it sets `WINDOWS_MODE=true` which:
+Use `docker-compose.no-audio.yml` or set `WINDOWS_MODE=true`:
 - Skips audio device detection
 - Allows player creation with `null` device
 - Simulates player start/stop
 
 ---
 
-## Common Tasks
+## Code Organization
 
-### Add a New API Endpoint
+### Managers (`app/managers/`)
 
-1. Add route in `app/app.py`:
+| Manager | Responsibility |
+|---------|----------------|
+| `AudioManager` | ALSA device enumeration, volume control, test tones |
+| `ConfigManager` | YAML file read/write, player config CRUD |
+| `ProcessManager` | Subprocess lifecycle, PID tracking, log management |
+| `PlayerManager` | High-level orchestration, provider coordination |
+
+### Providers (`app/providers/`)
+
+| Provider | Key Methods |
+|----------|-------------|
+| `SqueezeliteProvider` | `build_command()`, `generate_mac_address()` |
+| `SendspinProvider` | `build_command()`, PortAudio device handling |
+| `SnapcastProvider` | `build_command()`, `generate_host_id()` |
+
+### Schemas (`app/schemas/`)
+
+Pydantic models for configuration validation:
+- `SqueezelitePlayerConfig`
+- `SendspinPlayerConfig`
+- `SnapcastPlayerConfig`
+
+---
+
+## Adding a New Provider
+
+1. Create `app/providers/newplayer.py`:
 ```python
-@app.route('/api/my-endpoint', methods=['GET'])
-def my_endpoint():
-    """Short description for Swagger."""
-    return jsonify({'status': 'success'})
+from .base import PlayerProvider, PlayerConfig
+
+class NewPlayerProvider(PlayerProvider):
+    provider_type = "newplayer"
+    display_name = "New Player"
+    binary_name = "newplayer-binary"
+
+    def build_command(self, player: PlayerConfig, log_path: str) -> list[str]:
+        return [self.binary_name, "-o", player["device"]]
+
+    # Implement other abstract methods...
 ```
 
-2. Document in `app/swagger.yaml`
+2. Register in `app/providers/__init__.py`
+3. Register in `app/app.py` (provider_registry)
+4. Add schema in `app/schemas/player_config.py`
+5. Update `health_check.py` to check binary
+6. Update Dockerfile to install binary
+7. Add tests in `tests/test_newplayer_provider.py`
 
-### Add a New Player Setting
+---
 
-1. Update `create_player()` in `app/app.py` to accept the new field
-2. Update `update_player()` similarly
-3. Add UI input in `index.html` (in the add/edit modals)
-4. Update `swagger.yaml`
+## HAOS Add-on Development
 
-### Debug Audio Issues
+The `hassio/` directory contains Home Assistant OS add-on files:
 
-1. Check available devices: `GET /api/devices`
-2. Check debug info: `GET /api/debug/audio`
-3. View container logs: `docker logs squeezelite-docker`
-4. Shell into container: `docker exec -it squeezelite-docker bash`
+```bash
+# Build locally
+cd hassio
+docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.11 -t multiroom-addon .
+
+# Test in HAOS
+# Copy hassio/ folder to /addons/multiroom-audio on your HA instance
+# Go to Settings → Add-ons → Local add-ons → Refresh → Install
+```
+
+Key differences from standalone Docker:
+- Uses PulseAudio instead of ALSA
+- Config stored in `/data` instead of `/app/config`
+- Alpine Linux base instead of Debian
 
 ---
 
@@ -238,60 +336,40 @@ def my_endpoint():
 
 | Layer | Technology |
 |-------|------------|
-| **Backend** | Python 3.10, Flask 2.3.3 |
+| **Backend** | Python 3.11+, Flask, Pydantic |
 | **Real-time** | Flask-SocketIO, Socket.IO |
 | **Frontend** | Bootstrap 5, Vanilla JS |
-| **Audio** | Squeezelite, ALSA |
-| **Container** | Docker, Ubuntu 22.04 |
-| **Process Mgmt** | Supervisor |
-
----
-
-## Code Locations for Specific Tasks
-
-| Task | Where to Look |
-|------|---------------|
-| Player lifecycle | `app.py:600-750` (create/update/delete) |
-| Process management | `app.py:380-500` (start/stop) |
-| Audio device detection | `app.py:240-280` (get_audio_devices) |
-| Volume control | `app.py:500-550` (amixer integration) |
-| Real-time updates | `app.py:730-750` (status_monitor thread) |
-| WebSocket handling | `index.html:300+` (socket.on events) |
-| Form handling | `index.html:400+` (handleAddPlayerForm) |
+| **Audio** | Squeezelite, Sendspin, Snapcast, ALSA, PulseAudio |
+| **Container** | Docker (Debian/Alpine) |
+| **Testing** | pytest, pytest-mock |
+| **Linting** | Ruff |
 
 ---
 
 ## Gotchas & Tips
 
-1. **MAC addresses are auto-generated** using MD5 hash of player name if not provided
+1. **Provider determines device format**:
+   - Squeezelite/Snapcast: ALSA (`hw:0,0`)
+   - Sendspin: PortAudio index (`0`, `1`, `2`)
 
-2. **Volume control tries multiple ALSA controls** in order: Master, PCM, Speaker, Headphone, etc.
+2. **MAC addresses auto-generated** from player name hash (Squeezelite)
 
-3. **Two versions of app.py exist**:
-   - `app.py` - Standard version
-   - `app_enhanced.py` - Adds state persistence (players restart after container restart)
+3. **Host IDs auto-generated** from player name hash (Snapcast)
 
-4. **Status updates are every 2 seconds** - don't expect instant UI updates
+4. **Environment detection** happens at import time - restart needed for changes
 
-5. **Audio devices must be passed through** to Docker container via `--device` flag
+5. **HAOS uses PulseAudio** - ALSA device names get converted to `pulse`
 
-6. **Windows/Mac can only test UI** - audio features require Linux ALSA
+6. **Test tones** use speaker-test (ALSA) or sounddevice (PortAudio)
+
+7. **Status updates every 2 seconds** via WebSocket
 
 ---
 
 ## Getting Help
 
-- Check [README.md](README.md) for deployment options
-- Check [BUILD-GUIDE.md](BUILD-GUIDE.md) for build troubleshooting
+- [README.md](README.md) - User documentation
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Detailed architecture
+- [BUILD-GUIDE.md](BUILD-GUIDE.md) - Build troubleshooting
+- [hassio/DOCS.md](hassio/DOCS.md) - HAOS add-on documentation
 - API docs at http://localhost:8080/api/docs
-- Container health: `GET /api/health`
-
----
-
-## Next Steps
-
-1. Run the project with `docker-compose.no-audio.yml`
-2. Create a test player through the UI
-3. Explore the API via Swagger UI
-4. Read through `app.py` focusing on `SqueezeliteManager` class
-5. Make a small change (e.g., add a log message) and rebuild

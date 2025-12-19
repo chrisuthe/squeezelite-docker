@@ -1,6 +1,6 @@
-# Unit Tests for Multi Output Player
+# Unit Tests for Multi-Room Audio Controller
 
-This directory contains comprehensive unit tests for the Multi Output Player application.
+This directory contains comprehensive unit tests for the Multi-Room Audio Controller application.
 
 ## Test Structure
 
@@ -12,6 +12,7 @@ tests/
 ├── test_config_manager.py               # Tests for ConfigManager
 ├── test_audio_manager.py                # Tests for AudioManager
 ├── test_process_manager.py              # Tests for ProcessManager
+├── test_snapcast_provider.py            # Tests for SnapcastProvider
 └── README.md                            # This file
 ```
 
@@ -31,7 +32,7 @@ This will install pytest and pytest-mock along with the application dependencies
 
 ```bash
 # Run all tests with verbose output
-pytest tests/
+pytest tests/ -v
 
 # Or use the shorter form
 pytest
@@ -51,6 +52,9 @@ pytest tests/test_audio_manager.py
 
 # Test only ProcessManager
 pytest tests/test_process_manager.py
+
+# Test only SnapcastProvider
+pytest tests/test_snapcast_provider.py
 ```
 
 ### Run Specific Test Classes or Functions
@@ -89,6 +93,9 @@ pytest -vv
 
 # Show print statements
 pytest -s
+
+# With coverage report
+pytest tests/ --cov=app --cov-report=html
 ```
 
 ## Test Coverage
@@ -99,6 +106,7 @@ The test suite covers:
 - Base player configuration validation
 - Squeezelite player configuration
 - Sendspin player configuration
+- Snapcast player configuration
 - Field validators (name, MAC address, URLs, log levels, etc.)
 - Default values and type coercion
 - Validation functions and error handling
@@ -127,12 +135,29 @@ The test suite covers:
 - Process cleanup and monitoring
 - Error handling for process failures
 
+### 5. SnapcastProvider (`test_snapcast_provider.py`)
+- Command building with various configurations
+- Host ID generation from player names
+- Volume control integration
+- Configuration validation
+- Default configuration values
+- Server IP and latency options
+
+## Provider Test Coverage
+
+| Provider | Test File | Key Tests |
+|----------|-----------|-----------|
+| Squeezelite | `test_player_config_schema.py` | MAC generation, buffer params, server IP |
+| Sendspin | `test_player_config_schema.py` | PortAudio device index, server URL |
+| Snapcast | `test_snapcast_provider.py` | Host ID generation, latency, auto-discovery |
+
 ## Mocking Strategy
 
 The tests use extensive mocking to avoid:
 - File system I/O (using `tmp_path` fixture and mocked file operations)
 - Subprocess calls (mocking `subprocess.run` and `subprocess.Popen`)
 - System-specific operations (ALSA tools, process signals)
+- Environment detection (mocking `is_hassio()` for HAOS tests)
 
 This ensures tests:
 - Run quickly and reliably
@@ -150,6 +175,7 @@ Key fixtures provided in `conftest.py`:
 - `temp_log_dir` - Temporary log directory
 - `sample_squeezelite_config` - Valid Squeezelite configuration
 - `sample_sendspin_config` - Valid Sendspin configuration
+- `sample_snapcast_config` - Valid Snapcast configuration
 - `minimal_*_config` - Minimal valid configurations
 
 ### Invalid Configuration Fixtures
@@ -163,6 +189,27 @@ Key fixtures provided in `conftest.py`:
 - `mock_amixer_*_output` - Simulated amixer outputs
 - `mock_process` - Mock running process
 - `mock_failed_process` - Mock failed process
+
+## Environment-Specific Testing
+
+The application supports both standalone Docker (ALSA) and HAOS (PulseAudio) environments. When testing environment-specific code:
+
+```python
+# Mock HAOS environment
+with patch('environment.is_hassio', return_value=True):
+    # Test PulseAudio behavior
+    pass
+
+# Mock standalone Docker environment
+with patch('environment.is_hassio', return_value=False):
+    # Test ALSA behavior
+    pass
+```
+
+## Known Platform Issues
+
+### Windows
+Some tests involving `os.setsid()` may fail on Windows as this is a Unix-specific function. These failures are expected and don't affect the actual application functionality on Linux/Docker.
 
 ## Continuous Integration
 
@@ -181,6 +228,21 @@ When adding new features:
 3. Check code style: `ruff check tests/`
 4. Format code: `ruff format tests/`
 5. Aim for high test coverage
+
+### Adding Provider Tests
+
+When adding a new provider, create a corresponding test file:
+
+```bash
+tests/test_newprovider_provider.py
+```
+
+Include tests for:
+- `build_command()` - All command variations
+- `validate_config()` - Valid and invalid configurations
+- `prepare_config()` - Default value generation
+- `get_volume()` / `set_volume()` - Volume control
+- Any unique identifier generation (MAC, host ID, etc.)
 
 ## Troubleshooting
 
@@ -209,3 +271,4 @@ Tests are designed to be platform-agnostic. If you encounter platform-specific i
 - Check that mocking is properly configured
 - Ensure subprocess calls are mocked
 - Verify file paths use `os.path.join()` or `Path`
+- Mock `os.setsid` on Windows if needed
