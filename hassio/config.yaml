@@ -4,13 +4,13 @@ slug: multiroom-audio
 description: >-
   Manage multiple audio players (Squeezelite, Sendspin, Snapcast) from one
   interface. Create whole-home audio with USB DACs connected to your HA server.
-url: https://github.com/chrisuthe/squeezelite-docker
+url: https://github.com/chrisuthe/Multi-SendSpin-Player-Container
+image: ghcr.io/chrisuthe/multiroom-audio-hassio
 startup: services
 arch:
   - aarch64
   - amd64
   - armv7
-  - i386
 
 # Hardware access
 audio: true
