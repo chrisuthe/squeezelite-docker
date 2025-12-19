@@ -88,13 +88,25 @@ jobs:
             VCS_REF=${{ github.sha }}
 
   # ==========================================================================
-  # Home Assistant Add-on Image (GHCR only)
+  # Home Assistant Add-on Image (GHCR only) - Multi-arch via matrix
   # ==========================================================================
   build-hassio:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            base_image: ghcr.io/home-assistant/amd64-base-python:3.11
+          - arch: aarch64
+            platform: linux/arm64
+            base_image: ghcr.io/home-assistant/aarch64-base-python:3.11
+          - arch: armv7
+            platform: linux/arm/v7
+            base_image: ghcr.io/home-assistant/armv7-base-python:3.11
 
     steps:
       - name: Checkout repository
@@ -118,25 +130,26 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.HASSIO_IMAGE }}
+          flavor: |
+            suffix=-${{ matrix.arch }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-,format=short
 
-      - name: Build and push HAOS add-on
+      - name: Build and push HAOS add-on (${{ matrix.arch }})
         uses: docker/build-push-action@v5
         with:
           context: .
           file: hassio/Dockerfile
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=hassio
-          cache-to: type=gha,mode=max,scope=hassio
+          cache-from: type=gha,scope=hassio-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=hassio-${{ matrix.arch }}
           build-args: |
-            BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.11
+            BUILD_FROM=${{ matrix.base_image }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
 
