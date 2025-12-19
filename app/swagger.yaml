@@ -1,35 +1,38 @@
 openapi: 3.0.3
 info:
-  title: Multi Output Player API
+  title: Multi-Room Audio Controller API
   description: |
     A comprehensive API for managing multiple audio players in a multi-room setup.
-    Supports both Squeezelite (LMS/SlimProto) and Sendspin (Music Assistant native) players.
+    Supports Squeezelite (LMS/SlimProto), Sendspin (Music Assistant native), and Snapcast players.
 
     ## Features
-    - 🎵 **Multi-room audio control** - Manage multiple audio players
-    - 🔄 **Multiple backends** - Squeezelite (LMS) or Sendspin (Music Assistant)
-    - 🔊 **Volume control** - Hardware ALSA mixer integration
-    - 🎛️ **Device management** - Auto-detect and configure audio devices
-    - 📱 **Real-time updates** - WebSocket support for live status updates
-    - 🔧 **Debug tools** - Audio device detection and troubleshooting
+    - **Multi-room audio control** - Manage multiple audio players
+    - **Multiple backends** - Squeezelite (LMS), Sendspin (Music Assistant), Snapcast
+    - **Volume control** - Hardware ALSA mixer integration
+    - **Device management** - Auto-detect and configure audio devices
+    - **Real-time updates** - WebSocket support for live status updates
+    - **Debug tools** - Audio device detection and troubleshooting
+    - **HAOS Support** - Runs as Home Assistant OS add-on with PulseAudio
 
     ## Player Types
     - **Squeezelite**: Traditional LMS/SlimProto player for Logitech Media Server
     - **Sendspin**: Native Music Assistant player using synchronized audio protocol
-    
+    - **Snapcast**: Synchronized multiroom audio client for Snapserver
+
     ## Audio Devices
     The API automatically detects available audio devices:
     - **Hardware devices**: `hw:X,Y` format (e.g., `hw:1,0`)
     - **Virtual devices**: `null`, `pulse`, `dmix`, `default`
     - **USB devices**: Automatically detected with proper mixer controls
-    
+    - **PulseAudio**: Automatic switching when running in HAOS
+
     ## Volume Control
     Volume control uses ALSA mixer with automatic control detection:
     - Tries multiple mixer controls: `Master`, `PCM`, `Speaker`, `Headphone`, `Digital`
     - Returns specific control used in success messages
     - Supports 0-100% volume range
-    
-  version: 1.0.0
+
+  version: 1.1.0
   contact:
     name: Multi Output Player
     url: https://github.com/ralph-irving/squeezelite
@@ -507,8 +510,8 @@ components:
           example: Headphones
         provider:
           type: string
-          enum: [squeezelite, sendspin]
-          description: Player backend type (squeezelite for LMS/SlimProto, sendspin for Music Assistant native)
+          enum: [squeezelite, sendspin, snapcast]
+          description: Player backend type (squeezelite for LMS, sendspin for Music Assistant, snapcast for Snapserver)
           default: squeezelite
           example: squeezelite
         device:
@@ -572,8 +575,8 @@ components:
           example: Living Room
         provider:
           type: string
-          enum: [squeezelite, sendspin]
-          description: Player backend type (squeezelite for LMS/SlimProto, sendspin for Music Assistant native)
+          enum: [squeezelite, sendspin, snapcast]
+          description: Player backend type (squeezelite for LMS, sendspin for Music Assistant, snapcast for Snapserver)
           default: squeezelite
           example: squeezelite
         device:
@@ -602,8 +605,8 @@ components:
           example: Living Room Updated
         provider:
           type: string
-          enum: [squeezelite, sendspin]
-          description: Player backend type (squeezelite for LMS/SlimProto, sendspin for Music Assistant native)
+          enum: [squeezelite, sendspin, snapcast]
+          description: Player backend type (squeezelite for LMS, sendspin for Music Assistant, snapcast for Snapserver)
           default: squeezelite
           example: squeezelite
         device:

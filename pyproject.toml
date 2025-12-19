@@ -1,7 +1,7 @@
 [project]
-name = "squeezelite-multiroom"
-version = "1.0.0"
-description = "Multi-room Squeezelite audio player manager"
+name = "multiroom-audio"
+version = "1.1.0"
+description = "Multi-room audio player manager supporting Squeezelite, Sendspin, and Snapcast"
 requires-python = ">=3.10"
 
 [tool.ruff]
