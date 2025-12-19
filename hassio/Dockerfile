@@ -20,8 +20,6 @@ RUN apk add --no-cache \
     alsa-lib \
     pulseaudio-utils \
     portaudio \
-    # Squeezelite (from community repo)
-    squeezelite \
     # Build dependencies for Python packages
     gcc \
     python3-dev \
@@ -30,10 +28,22 @@ RUN apk add --no-cache \
     # Curl for health checks
     curl
 
-# Install snapclient from community repo (if available) or download
+# Install snapclient from edge/community
 RUN apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community \
-    snapcast-client || \
-    echo "snapclient not available in repos, will need manual install"
+    snapcast-client || echo "snapclient not available"
+
+# Build squeezelite from source (not in Alpine repos)
+RUN apk add --no-cache --virtual .build-deps \
+        git make linux-headers flac-dev libvorbis-dev \
+        libmad-dev faad2-dev mpg123-dev alsa-lib-dev \
+        opusfile-dev soxr-dev && \
+    git clone --depth 1 https://github.com/ralph-irving/squeezelite.git /tmp/squeezelite && \
+    cd /tmp/squeezelite && \
+    make OPTS="-DRESAMPLE -DDSD -DLINKALL" && \
+    cp squeezelite /usr/local/bin/ && \
+    chmod +x /usr/local/bin/squeezelite && \
+    cd / && rm -rf /tmp/squeezelite && \
+    apk del .build-deps
 
 # Create app directory
 WORKDIR /app

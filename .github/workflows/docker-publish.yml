@@ -100,10 +100,8 @@ jobs:
         include:
           - arch: amd64
             platform: linux/amd64
-            base_image: homeassistant/amd64-base-python:3.11
           - arch: aarch64
             platform: linux/arm64
-            base_image: homeassistant/aarch64-base-python:3.11
 
     steps:
       - name: Checkout repository
@@ -146,7 +144,7 @@ jobs:
           cache-from: type=gha,scope=hassio-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=hassio-${{ matrix.arch }}
           build-args: |
-            BUILD_FROM=${{ matrix.base_image }}
+            BUILD_FROM=ghcr.io/hassio-addons/base-python:18.0.0
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
 
