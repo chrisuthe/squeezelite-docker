@@ -39,6 +39,7 @@ import traceback
 from typing import Any
 
 from common import create_flask_app, register_routes, register_websocket_handlers, run_server, start_status_monitor
+from env_validation import validate_environment_variables
 from managers import AudioManager, ConfigManager, ProcessManager
 from providers import ProviderRegistry, SendspinProvider, SnapcastProvider, SqueezeliteProvider
 
@@ -61,6 +62,21 @@ logger.info(f"Python version: {sys.version}")
 logger.info(f"Working directory: {os.getcwd()}")
 logger.info(f"Python path: {sys.path}")
 logger.info("=" * 50)
+
+# =============================================================================
+# ENVIRONMENT VARIABLE VALIDATION
+# =============================================================================
+
+# Validate environment variables early to catch configuration issues
+validation_result = validate_environment_variables()
+if not validation_result["valid"]:
+    logger.warning("=" * 50)
+    logger.warning("CONFIGURATION WARNINGS DETECTED")
+    logger.warning("The following environment variables have invalid values:")
+    for warning in validation_result["warnings"]:
+        logger.warning(f"  - {warning}")
+    logger.warning("Application will continue with default values.")
+    logger.warning("=" * 50)
 
 try:
     # Test imports

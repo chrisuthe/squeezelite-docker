@@ -219,15 +219,15 @@ Comprehensive review from QA, Security, and Senior Developer perspectives.
 1. ~~Add API endpoint integration tests~~ ✅ DONE - `tests/test_api_endpoints.py` (59 tests)
 2. ~~Add missing provider tests (squeezelite, sendspin)~~ ✅ DONE - `tests/test_squeezelite_provider.py`, `tests/test_sendspin_provider.py`
 3. ~~Standardize API error response format~~ ✅ DONE - Updated `app/common.py` with consistent `{success, error}` format
-4. Add mypy type checking to CI
+4. ~~Add mypy type checking to CI~~ ✅ DONE - Added to `.github/workflows/docker-publish.yml` with lenient settings
 
 ### Short-term
 
 1. Consolidate manager implementations (remove hasattr checks)
 2. Add rate limiting (Flask-Limiter)
 3. ~~Enhance player name validation (block `..` and shell metacharacters)~~ ✅ DONE - Updated `app/schemas/player_config.py`
-4. Validate environment variables on startup
-5. Update Flask to latest version
+4. ~~Validate environment variables on startup~~ ✅ DONE - Added `app/env_validation.py` with comprehensive validation
+5. ~~Update Flask to latest version~~ ✅ DONE - Updated Flask 2.3.3 → 3.1.0, Flask-SocketIO → 5.4.1
 
 ### Also Completed
 
