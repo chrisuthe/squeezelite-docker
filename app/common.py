@@ -535,8 +535,7 @@ def safe_emit(socketio, event, data, timeout=WEBSOCKET_EMIT_TIMEOUT_SECS):
             # Log every failure for the first 3, then every 10th to avoid log spam
             if _websocket_failure_count <= 3 or _websocket_failure_count % 10 == 0:
                 logger.warning(
-                    f"WebSocket connection error for event '{event}' "
-                    f"(failure #{_websocket_failure_count}): {e}"
+                    f"WebSocket connection error for event '{event}' (failure #{_websocket_failure_count}): {e}"
                 )
         return False
 
@@ -544,10 +543,7 @@ def safe_emit(socketio, event, data, timeout=WEBSOCKET_EMIT_TIMEOUT_SECS):
         with _websocket_failure_count_lock:
             _websocket_failure_count += 1
             if _websocket_failure_count <= 3 or _websocket_failure_count % 10 == 0:
-                logger.warning(
-                    f"WebSocket broken pipe for event '{event}' "
-                    f"(failure #{_websocket_failure_count}): {e}"
-                )
+                logger.warning(f"WebSocket broken pipe for event '{event}' (failure #{_websocket_failure_count}): {e}")
         return False
 
     except OSError as e:
@@ -555,10 +551,7 @@ def safe_emit(socketio, event, data, timeout=WEBSOCKET_EMIT_TIMEOUT_SECS):
         with _websocket_failure_count_lock:
             _websocket_failure_count += 1
             if _websocket_failure_count <= 3 or _websocket_failure_count % 10 == 0:
-                logger.warning(
-                    f"WebSocket OS error for event '{event}' "
-                    f"(failure #{_websocket_failure_count}): {e}"
-                )
+                logger.warning(f"WebSocket OS error for event '{event}' (failure #{_websocket_failure_count}): {e}")
         return False
 
     except Exception as e:

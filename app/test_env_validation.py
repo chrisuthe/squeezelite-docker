@@ -104,8 +104,7 @@ def run_tests():
             status = "FAIL"
             failed += 1
             errors.append(
-                f"{env_var}={value} ({description}): "
-                f"Expected valid={expected_valid}, got warnings={result['warnings']}"
+                f"{env_var}={value} ({description}): Expected valid={expected_valid}, got warnings={result['warnings']}"
             )
 
         print(f"[{status}] {env_var}={value:20s} ({description})")

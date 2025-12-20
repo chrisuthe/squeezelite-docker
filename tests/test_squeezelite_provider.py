@@ -479,7 +479,9 @@ class TestPrepareConfig:
 class TestVolumeControl:
     """Tests for volume control methods."""
 
-    def test_get_volume_delegates_to_audio_manager(self, squeezelite_provider, mock_audio_manager, sample_squeezelite_config):
+    def test_get_volume_delegates_to_audio_manager(
+        self, squeezelite_provider, mock_audio_manager, sample_squeezelite_config
+    ):
         """Test that get_volume delegates to AudioManager."""
         volume = squeezelite_provider.get_volume(sample_squeezelite_config)
 
@@ -493,7 +495,9 @@ class TestVolumeControl:
 
         mock_audio_manager.get_volume.assert_called_once_with("default")
 
-    def test_set_volume_delegates_to_audio_manager(self, squeezelite_provider, mock_audio_manager, sample_squeezelite_config):
+    def test_set_volume_delegates_to_audio_manager(
+        self, squeezelite_provider, mock_audio_manager, sample_squeezelite_config
+    ):
         """Test that set_volume delegates to AudioManager."""
         success, message = squeezelite_provider.set_volume(sample_squeezelite_config, 50)
 

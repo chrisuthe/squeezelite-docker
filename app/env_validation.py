@@ -47,25 +47,16 @@ def validate_integer(
     try:
         value = int(value_str)
     except ValueError:
-        warning = (
-            f"Invalid value for {env_var}='{value_str}': must be an integer. "
-            f"Using default value: {default}"
-        )
+        warning = f"Invalid value for {env_var}='{value_str}': must be an integer. Using default value: {default}"
         return False, default_int, warning
 
     # Check range if specified
     if min_value is not None and value < min_value:
-        warning = (
-            f"Value for {env_var}={value} is below minimum {min_value}. "
-            f"Using default value: {default}"
-        )
+        warning = f"Value for {env_var}={value} is below minimum {min_value}. Using default value: {default}"
         return False, default_int, warning
 
     if max_value is not None and value > max_value:
-        warning = (
-            f"Value for {env_var}={value} exceeds maximum {max_value}. "
-            f"Using default value: {default}"
-        )
+        warning = f"Value for {env_var}={value} exceeds maximum {max_value}. Using default value: {default}"
         return False, default_int, warning
 
     return True, value, ""
@@ -118,9 +109,7 @@ def validate_buffer_params(env_var: str, default: str) -> tuple[bool, str, str]:
             return False, default, warning
 
     except ValueError:
-        warning = (
-            f"Invalid numeric values in {env_var}='{value}'. " f"Using default value: {default}"
-        )
+        warning = f"Invalid numeric values in {env_var}='{value}'. Using default value: {default}"
         return False, default, warning
 
     return True, value, ""
@@ -225,45 +214,39 @@ def validate_environment_variables() -> dict[str, Any]:
     # -------------------------------------------------------------------------
 
     # SQUEEZELITE_BUFFER_TIME: ALSA buffer time in milliseconds (20-200ms typical)
-    is_valid, value, warning = validate_integer(
-        "SQUEEZELITE_BUFFER_TIME", "80", min_value=1, max_value=1000
-    )
+    is_valid, int_val, warning = validate_integer("SQUEEZELITE_BUFFER_TIME", "80", min_value=1, max_value=1000)
     if warning:
         warnings.append(warning)
         logger.warning(warning)
-    validated_vars["SQUEEZELITE_BUFFER_TIME"] = value
+    validated_vars["SQUEEZELITE_BUFFER_TIME"] = int_val
 
     # SQUEEZELITE_BUFFER_PARAMS: Stream and output buffer sizes "stream:output" in KB
-    is_valid, value, warning = validate_buffer_params("SQUEEZELITE_BUFFER_PARAMS", "500:2000")
+    is_valid, str_val, warning = validate_buffer_params("SQUEEZELITE_BUFFER_PARAMS", "500:2000")
     if warning:
         warnings.append(warning)
         logger.warning(warning)
-    validated_vars["SQUEEZELITE_BUFFER_PARAMS"] = value
+    validated_vars["SQUEEZELITE_BUFFER_PARAMS"] = str_val
 
     # SQUEEZELITE_CLOSE_TIMEOUT: Output device close timeout in seconds (0+)
-    is_valid, value, warning = validate_integer(
-        "SQUEEZELITE_CLOSE_TIMEOUT", "5", min_value=0, max_value=3600
-    )
+    is_valid, int_val, warning = validate_integer("SQUEEZELITE_CLOSE_TIMEOUT", "5", min_value=0, max_value=3600)
     if warning:
         warnings.append(warning)
         logger.warning(warning)
-    validated_vars["SQUEEZELITE_CLOSE_TIMEOUT"] = value
+    validated_vars["SQUEEZELITE_CLOSE_TIMEOUT"] = int_val
 
     # SQUEEZELITE_SAMPLE_RATE: Sample rate for null device (8000-192000 typical)
-    is_valid, value, warning = validate_integer(
-        "SQUEEZELITE_SAMPLE_RATE", "44100", min_value=8000, max_value=384000
-    )
+    is_valid, int_val, warning = validate_integer("SQUEEZELITE_SAMPLE_RATE", "44100", min_value=8000, max_value=384000)
     if warning:
         warnings.append(warning)
         logger.warning(warning)
-    validated_vars["SQUEEZELITE_SAMPLE_RATE"] = value
+    validated_vars["SQUEEZELITE_SAMPLE_RATE"] = int_val
 
     # SQUEEZELITE_WINDOWS_MODE: Windows compatibility mode (0 or 1)
-    is_valid, value, warning = validate_boolean("SQUEEZELITE_WINDOWS_MODE", "0")
+    is_valid, bool_val, warning = validate_boolean("SQUEEZELITE_WINDOWS_MODE", "0")
     if warning:
         warnings.append(warning)
         logger.warning(warning)
-    validated_vars["SQUEEZELITE_WINDOWS_MODE"] = value
+    validated_vars["SQUEEZELITE_WINDOWS_MODE"] = bool_val
 
     # -------------------------------------------------------------------------
     # Application Configuration Variables
@@ -288,7 +271,7 @@ def validate_environment_variables() -> dict[str, Any]:
     validated_vars["SECRET_KEY"] = secret_key
 
     # AUDIO_BACKEND: Audio backend selection (alsa, pulse, pipewire)
-    is_valid, value, warning = validate_enum(
+    is_valid, str_val, warning = validate_enum(
         "AUDIO_BACKEND",
         "alsa",
         ["alsa", "pulse", "pulseaudio", "pipewire"],
@@ -297,7 +280,7 @@ def validate_environment_variables() -> dict[str, Any]:
     if warning:
         warnings.append(warning)
         logger.warning(warning)
-    validated_vars["AUDIO_BACKEND"] = value
+    validated_vars["AUDIO_BACKEND"] = str_val
 
     # CONFIG_PATH: Configuration directory path (informational only)
     config_path = os.environ.get("CONFIG_PATH", "/app/config")
@@ -314,11 +297,11 @@ def validate_environment_variables() -> dict[str, Any]:
     validated_vars["SUPERVISOR_TOKEN"] = supervisor_token
 
     # SENDSPIN_CONTAINER: Sendspin container mode flag (0 or 1)
-    is_valid, value, warning = validate_boolean("SENDSPIN_CONTAINER", "0")
+    is_valid, bool_val, warning = validate_boolean("SENDSPIN_CONTAINER", "0")
     if warning:
         warnings.append(warning)
         logger.warning(warning)
-    validated_vars["SENDSPIN_CONTAINER"] = value
+    validated_vars["SENDSPIN_CONTAINER"] = bool_val
 
     # -------------------------------------------------------------------------
     # Summary

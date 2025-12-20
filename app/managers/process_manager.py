@@ -89,7 +89,7 @@ class ProcessManager:
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                preexec_fn=os.setsid,
+                preexec_fn=os.setsid,  # type: ignore[attr-defined]  # Unix-only
             )
 
             self.processes[name] = process
@@ -139,7 +139,7 @@ class ProcessManager:
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                preexec_fn=os.setsid,
+                preexec_fn=os.setsid,  # type: ignore[attr-defined]  # Unix-only
             )
 
             self.processes[name] = process
@@ -184,7 +184,7 @@ class ProcessManager:
 
         try:
             # Send SIGTERM to the process group
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)  # type: ignore[attr-defined]  # Unix-only
 
             # Wait for process to terminate
             process.wait(timeout=PROCESS_STOP_TIMEOUT_SECS)
@@ -195,7 +195,7 @@ class ProcessManager:
         except subprocess.TimeoutExpired:
             # Force kill if it doesn't respond to SIGTERM
             try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)  # type: ignore[attr-defined]  # Unix-only
                 process.wait(timeout=PROCESS_KILL_TIMEOUT_SECS)
             except Exception:
                 pass

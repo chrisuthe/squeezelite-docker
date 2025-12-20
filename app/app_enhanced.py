@@ -37,6 +37,7 @@ import threading
 import time
 import traceback
 from datetime import datetime
+from typing import Any
 
 import yaml
 from common import create_flask_app, register_routes, register_websocket_handlers, run_server, start_status_monitor
@@ -228,8 +229,8 @@ class SqueezeliteManager:
             - Reads CONFIG_FILE and STATE_FILE if they exist
             - May start background thread to restore player states
         """
-        self.players = {}
-        self.processes = {}
+        self.players: dict[str, Any] = {}
+        self.processes: dict[str, subprocess.Popen[bytes]] = {}
         self.state_lock = threading.Lock()  # Thread safety for state operations
         self.load_config()
         self.load_state()  # NEW: Load previous running states
@@ -719,7 +720,7 @@ class SqueezeliteManager:
 
         try:
             # Start the process
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)  # type: ignore[attr-defined]  # Unix-only
 
             self.processes[name] = process
 
@@ -751,7 +752,10 @@ class SqueezeliteManager:
 
                     try:
                         process = subprocess.Popen(
-                            fallback_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid
+                            fallback_cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            preexec_fn=os.setsid,  # type: ignore[attr-defined]  # Unix-only
                         )
 
                         self.processes[name] = process
@@ -815,7 +819,7 @@ class SqueezeliteManager:
 
         try:
             # Send SIGTERM to the process group
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)  # type: ignore[attr-defined]  # Unix-only
 
             # Wait for process to terminate
             process.wait(timeout=PROCESS_STOP_TIMEOUT_SECS)
@@ -827,7 +831,7 @@ class SqueezeliteManager:
         except subprocess.TimeoutExpired:
             # Force kill if it doesn't respond to SIGTERM
             try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)  # type: ignore[attr-defined]  # Unix-only
                 process.wait(timeout=PROCESS_KILL_TIMEOUT_SECS)
             except Exception:
                 pass
@@ -903,7 +907,7 @@ class SqueezeliteManager:
             - state_file_exists: Whether STATE_FILE exists
             - last_state_save: ISO timestamp of last state file modification
         """
-        state_info = {
+        state_info: dict[str, int | bool | str | None] = {
             "total_players": len(self.players),
             "running_players": len([name for name in self.players if self.get_player_status(name)]),
             "state_file_exists": os.path.exists(STATE_FILE),
@@ -1072,7 +1076,7 @@ class SqueezeliteManager:
             logger.warning("amixer command not found")
             return False, "Audio mixer control not available"
 
-    def get_player_volume(self, name: str) -> int:
+    def get_player_volume(self, name: str) -> int | None:
         """
         Get the current volume for a player.
 

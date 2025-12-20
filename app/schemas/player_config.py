@@ -370,6 +370,7 @@ def validate_player_config(
     provider = config.get("provider", "squeezelite")
 
     try:
+        validated: BasePlayerConfig
         if provider == "sendspin":
             validated = SendspinPlayerConfig.model_validate(config)
         elif provider == "squeezelite":
@@ -470,7 +471,7 @@ def get_schema_for_provider(provider: str) -> type[BasePlayerConfig]:
         valid = ", ".join(sorted(schemas.keys()))
         raise ValueError(f"Unknown provider: {provider!r}. Valid providers: {valid}")
 
-    return schemas[provider]
+    return schemas[provider]  # type: ignore[return-value]
 
 
 def get_default_config(provider: str) -> dict[str, Any]:
@@ -491,9 +492,9 @@ def get_default_config(provider: str) -> dict[str, Any]:
     # Create instance with only required fields to get defaults
     # We use a placeholder name that will be replaced
     if provider == "squeezelite":
-        instance = schema_class(name="__default__", device="default")
+        instance = schema_class(name="__default__", device="default")  # type: ignore[call-arg]
     else:
-        instance = schema_class(name="__default__")
+        instance = schema_class(name="__default__")  # type: ignore[call-arg]
 
     config = instance.model_dump()
     del config["name"]  # Remove placeholder name

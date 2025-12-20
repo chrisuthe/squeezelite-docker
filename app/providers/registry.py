@@ -154,7 +154,7 @@ class ProviderRegistry:
 
         return None
 
-    def get_provider_info(self, available_only: bool = True) -> list[dict[str, str]]:
+    def get_provider_info(self, available_only: bool = True) -> list[dict[str, str | bool]]:
         """
         Get information about registered providers.
 
@@ -165,7 +165,7 @@ class ProviderRegistry:
         Returns:
             List of dictionaries with provider info (type, display_name, available).
         """
-        info = []
+        info: list[dict[str, str | bool]] = []
         for provider_type, provider in self._providers.items():
             is_available = provider.is_available()
             if available_only and not is_available:
