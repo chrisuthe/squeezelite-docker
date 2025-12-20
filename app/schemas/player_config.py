@@ -26,7 +26,11 @@ MAC_ADDRESS_PATTERN = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 WEBSOCKET_URL_PATTERN = re.compile(r"^wss?://")
 
 # Invalid characters for player names (filesystem/process safety)
-INVALID_NAME_CHARS = frozenset("/\\\x00")
+# Includes path traversal (..) and shell metacharacters to prevent injection
+INVALID_NAME_CHARS = frozenset("/\\\x00$`;|&")
+
+# Dangerous patterns for player names (path traversal)
+INVALID_NAME_PATTERNS = ("..",)
 
 # Maximum player name length
 MAX_NAME_LENGTH = 64
@@ -106,11 +110,18 @@ class BasePlayerConfig(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name_chars(cls, v: str) -> str:
-        """Validate that name doesn't contain invalid characters."""
+        """Validate that name doesn't contain invalid characters or dangerous patterns."""
+        # Check for invalid characters (shell metacharacters, path separators)
         invalid_found = set(v) & INVALID_NAME_CHARS
         if invalid_found:
             chars_repr = ", ".join(repr(c) for c in invalid_found)
             raise ValueError(f"Name contains invalid characters: {chars_repr}")
+
+        # Check for dangerous patterns (path traversal)
+        for pattern in INVALID_NAME_PATTERNS:
+            if pattern in v:
+                raise ValueError(f"Name contains invalid pattern: {pattern!r}")
+
         return v
 
 

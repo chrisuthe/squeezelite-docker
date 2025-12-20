@@ -16,6 +16,7 @@ The key difference is the manager implementation they use.
 import logging
 import os
 import re
+import secrets
 import subprocess
 import sys
 import threading
@@ -25,6 +26,8 @@ import traceback
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_socketio import SocketIO, emit
 from flask_swagger_ui import get_swaggerui_blueprint
+
+from app.schemas.player_config import INVALID_NAME_CHARS, MAX_NAME_LENGTH
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +67,14 @@ def create_flask_app():
     """
     try:
         app = Flask(__name__)
-        app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "squeezelite-multiroom-secret")
+        secret_key = os.environ.get("SECRET_KEY")
+        if not secret_key:
+            secret_key = secrets.token_hex(32)
+            logger.warning(
+                "SECRET_KEY not set - using randomly generated key. "
+                "This is not suitable for production. Set SECRET_KEY environment variable."
+            )
+        app.config["SECRET_KEY"] = secret_key
         socketio = SocketIO(app, cors_allowed_origins="*")
 
         # Configure Swagger UI
@@ -229,12 +239,25 @@ def register_routes(app, manager):
     @app.route("/api/players", methods=["POST"])
     def create_player():
         """API endpoint to create a new player"""
+        # Validate request.json is present and valid
+        if request.json is None:
+            return jsonify({"success": False, "error": "Request body must be valid JSON"}), 400
+
         data = request.json
         name = data.get("name")
         device = data.get("device", "default")
 
         if not name:
-            return jsonify({"success": False, "message": "Name is required"}), 400
+            return jsonify({"success": False, "error": "Name is required"}), 400
+
+        # Validate player name format
+        if len(name) > MAX_NAME_LENGTH:
+            return jsonify({"success": False, "error": f"Name must be at most {MAX_NAME_LENGTH} characters"}), 400
+
+        invalid_found = set(name) & INVALID_NAME_CHARS
+        if invalid_found:
+            chars_repr = ", ".join(repr(c) for c in invalid_found)
+            return jsonify({"success": False, "error": f"Name contains invalid characters: {chars_repr}"}), 400
 
         # Check if manager uses new PlayerManager or old SqueezeliteManager
         if hasattr(manager, "create_player"):
@@ -267,16 +290,33 @@ def register_routes(app, manager):
                 mac_address = data.get("mac_address", "")
                 success, message = manager.create_player(name, device, server_ip, mac_address)
         else:
-            return jsonify({"success": False, "message": "Manager does not support player creation"}), 500
+            return jsonify({"success": False, "error": "Manager does not support player creation"}), 500
 
-        return jsonify({"success": success, "message": message})
+        if success:
+            return jsonify({"success": True, "message": message})
+        else:
+            return jsonify({"success": False, "error": message}), 400
 
     @app.route("/api/players/<name>", methods=["PUT"])
     def update_player(name):
         """API endpoint to update a player"""
+        # Validate request.json is present and valid
+        if request.json is None:
+            return jsonify({"success": False, "error": "Request body must be valid JSON"}), 400
+
         data = request.json
         new_name = data.get("name", name)
         device = data.get("device", "default")
+
+        # Validate new player name format if provided
+        if new_name:
+            if len(new_name) > MAX_NAME_LENGTH:
+                return jsonify({"success": False, "error": f"Name must be at most {MAX_NAME_LENGTH} characters"}), 400
+
+            invalid_found = set(new_name) & INVALID_NAME_CHARS
+            if invalid_found:
+                chars_repr = ", ".join(repr(c) for c in invalid_found)
+                return jsonify({"success": False, "error": f"Name contains invalid characters: {chars_repr}"}), 400
 
         # Check if manager uses new PlayerManager or old SqueezeliteManager
         if hasattr(manager, "update_player"):
@@ -309,18 +349,21 @@ def register_routes(app, manager):
                 mac_address = data.get("mac_address", "")
                 success, message = manager.update_player(name, new_name, device, server_ip, mac_address)
         else:
-            return jsonify({"success": False, "message": "Manager does not support player updates"}), 500
+            return jsonify({"success": False, "error": "Manager does not support player updates"}), 500
 
         if success:
-            return jsonify({"success": success, "message": message, "new_name": new_name})
+            return jsonify({"success": True, "message": message, "data": {"new_name": new_name}})
         else:
-            return jsonify({"success": success, "message": message}), 400
+            return jsonify({"success": False, "error": message}), 400
 
     @app.route("/api/players/<name>", methods=["DELETE"])
     def delete_player(name):
         """API endpoint to delete a player"""
         success, message = manager.delete_player(name)
-        return jsonify({"success": success, "message": message})
+        if success:
+            return jsonify({"success": True, "message": message})
+        else:
+            return jsonify({"success": False, "error": message}), 404
 
     @app.route("/api/players/<name>/start", methods=["POST"])
     def start_player(name):
@@ -447,6 +490,83 @@ def register_routes(app, manager):
 # WEBSOCKET HANDLERS
 # =============================================================================
 
+# Default timeout for WebSocket emit operations (in seconds)
+WEBSOCKET_EMIT_TIMEOUT_SECS = 5
+
+# Counter for tracking consecutive WebSocket failures (for adaptive logging)
+_websocket_failure_count = 0
+_websocket_failure_count_lock = threading.Lock()
+
+
+def safe_emit(socketio, event, data, timeout=WEBSOCKET_EMIT_TIMEOUT_SECS):
+    """
+    Safely emit a WebSocket event with error handling and logging.
+
+    This function wraps socketio.emit() with proper exception handling to
+    prevent WebSocket errors from crashing the status monitor thread or
+    other background processes.
+
+    Args:
+        socketio: SocketIO instance.
+        event: Event name to emit.
+        data: Data to send with the event.
+        timeout: Timeout in seconds (note: Flask-SocketIO's emit is non-blocking
+                 by default; this is used for logging/monitoring purposes).
+
+    Returns:
+        bool: True if emit succeeded, False otherwise.
+    """
+    global _websocket_failure_count
+
+    try:
+        socketio.emit(event, data)
+
+        # Reset failure count on success
+        with _websocket_failure_count_lock:
+            if _websocket_failure_count > 0:
+                logger.info(f"WebSocket emit recovered after {_websocket_failure_count} failures")
+                _websocket_failure_count = 0
+
+        return True
+
+    except ConnectionError as e:
+        with _websocket_failure_count_lock:
+            _websocket_failure_count += 1
+            # Log every failure for the first 3, then every 10th to avoid log spam
+            if _websocket_failure_count <= 3 or _websocket_failure_count % 10 == 0:
+                logger.warning(
+                    f"WebSocket connection error for event '{event}' "
+                    f"(failure #{_websocket_failure_count}): {e}"
+                )
+        return False
+
+    except BrokenPipeError as e:
+        with _websocket_failure_count_lock:
+            _websocket_failure_count += 1
+            if _websocket_failure_count <= 3 or _websocket_failure_count % 10 == 0:
+                logger.warning(
+                    f"WebSocket broken pipe for event '{event}' "
+                    f"(failure #{_websocket_failure_count}): {e}"
+                )
+        return False
+
+    except OSError as e:
+        # Catch socket-related OS errors (e.g., connection reset)
+        with _websocket_failure_count_lock:
+            _websocket_failure_count += 1
+            if _websocket_failure_count <= 3 or _websocket_failure_count % 10 == 0:
+                logger.warning(
+                    f"WebSocket OS error for event '{event}' "
+                    f"(failure #{_websocket_failure_count}): {e}"
+                )
+        return False
+
+    except Exception as e:
+        with _websocket_failure_count_lock:
+            _websocket_failure_count += 1
+        logger.error(f"Unexpected WebSocket error for event '{event}': {type(e).__name__}: {e}")
+        return False
+
 
 def register_websocket_handlers(socketio, manager):
     """
@@ -459,8 +579,27 @@ def register_websocket_handlers(socketio, manager):
 
     @socketio.on("connect")
     def handle_connect():
-        """Handle WebSocket connection"""
-        emit("status_update", manager.get_all_statuses())
+        """Handle WebSocket client connection"""
+        logger.debug("WebSocket client connected")
+        try:
+            emit("status_update", manager.get_all_statuses())
+        except Exception as e:
+            logger.warning(f"Failed to send initial status update on connect: {e}")
+
+    @socketio.on("disconnect")
+    def handle_disconnect():
+        """Handle WebSocket client disconnection gracefully"""
+        logger.debug("WebSocket client disconnected")
+
+    @socketio.on_error_default
+    def default_error_handler(e):
+        """
+        Handle WebSocket errors globally.
+
+        This catches any unhandled exceptions in WebSocket event handlers
+        and logs them appropriately without crashing the server.
+        """
+        logger.error(f"WebSocket error: {type(e).__name__}: {e}")
 
 
 def start_status_monitor(socketio, manager):
@@ -481,9 +620,11 @@ def start_status_monitor(socketio, manager):
         while True:
             try:
                 statuses = manager.get_all_statuses()
-                socketio.emit("status_update", statuses)
+                # Use safe_emit to handle WebSocket errors gracefully
+                safe_emit(socketio, "status_update", statuses)
                 time.sleep(STATUS_MONITOR_INTERVAL_SECS)
             except Exception as e:
+                # This catches errors in get_all_statuses() or other non-WebSocket issues
                 logger.error(f"Error in status monitor: {e}")
                 time.sleep(STATUS_MONITOR_ERROR_DELAY_SECS)
 

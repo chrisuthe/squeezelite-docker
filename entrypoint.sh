@@ -5,9 +5,21 @@
 echo "Starting Multi Output Player..."
 
 # Set default values for environment variables (if not provided)
-export SECRET_KEY="${SECRET_KEY:-squeezelite-multiroom-secret}"
-export SUPERVISOR_USER="${SUPERVISOR_USER:-admin}"
-export SUPERVISOR_PASSWORD="${SUPERVISOR_PASSWORD:-admin}"
+# Generate random secrets if not explicitly set
+if [ -z "$SECRET_KEY" ]; then
+    export SECRET_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+    echo "WARNING: SECRET_KEY not set - using randomly generated key. This is not suitable for production."
+fi
+
+if [ -z "$SUPERVISOR_USER" ]; then
+    export SUPERVISOR_USER="admin_$(head -c 8 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 8)"
+    echo "WARNING: SUPERVISOR_USER not set - using randomly generated username: $SUPERVISOR_USER"
+fi
+
+if [ -z "$SUPERVISOR_PASSWORD" ]; then
+    export SUPERVISOR_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 24)
+    echo "WARNING: SUPERVISOR_PASSWORD not set - using randomly generated password. This is not suitable for production."
+fi
 
 # Set permissions for audio devices (if they exist)
 if [ -d "/dev/snd" ]; then
