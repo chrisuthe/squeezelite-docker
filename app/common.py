@@ -26,8 +26,7 @@ import traceback
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_socketio import SocketIO, emit
 from flask_swagger_ui import get_swaggerui_blueprint
-
-from app.schemas.player_config import INVALID_NAME_CHARS, MAX_NAME_LENGTH
+from schemas.player_config import INVALID_NAME_CHARS, MAX_NAME_LENGTH
 
 logger = logging.getLogger(__name__)
 
