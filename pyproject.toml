@@ -2,11 +2,11 @@
 name = "multiroom-audio"
 version = "1.1.0"
 description = "Multi-room audio player manager supporting Squeezelite, Sendspin, and Snapcast"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 [tool.ruff]
-# Target Python 3.10 (Ubuntu 22.04 default)
-target-version = "py310"
+# Target Python 3.12 (required by sendspin)
+target-version = "py312"
 
 # Line length to match common standards
 line-length = 120
@@ -85,8 +85,8 @@ markers = [
 minversion = "7.0"
 
 [tool.mypy]
-# Target Python 3.10 to match the project
-python_version = "3.10"
+# Target Python 3.12 to match the project (required by sendspin)
+python_version = "3.12"
 
 # Start with lenient settings that can be tightened later
 # Don't require type hints everywhere yet
