@@ -100,8 +100,9 @@ ignore_missing_imports = true
 # Show error codes in output for easier filtering
 show_error_codes = true
 
-# Warn about unused ignores to keep code clean
-warn_unused_ignores = true
+# Disable warn_unused_ignores since we have platform-specific ignores
+# (Unix functions like os.setsid don't exist on Windows but do on Linux)
+warn_unused_ignores = false
 
 # Don't require return types on all functions yet
 disallow_untyped_calls = false

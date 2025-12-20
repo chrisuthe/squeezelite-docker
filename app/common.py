@@ -414,7 +414,7 @@ def register_routes(app, manager):
             return jsonify({"success": success, "message": message})
         except Exception as e:
             logger.error(f"Error in set_player_volume for {n}: {e}")
-            logger.error(f"Request data: {request.get_data()}")
+            logger.error(f"Request data: {request.get_data().decode('utf-8', errors='replace')}")
             return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
 
     @app.route("/api/debug/audio", methods=["GET"])
