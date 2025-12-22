@@ -1,6 +1,0 @@
-# Home Assistant Add-on Repository Configuration
-# Users add this repository URL to their HA add-on store
-
-name: Multi-Room Audio Add-ons
-url: https://github.com/chrisuthe/squeezelite-docker
-maintainer: Chris Uthe

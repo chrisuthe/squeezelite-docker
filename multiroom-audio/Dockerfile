@@ -65,7 +65,7 @@ COPY app/templates/ /app/templates/
 RUN mkdir -p /data /data/logs
 
 # Copy run script
-COPY hassio/run.sh /run.sh
+COPY multiroom-audio/run.sh /run.sh
 RUN chmod +x /run.sh
 
 # Health check
